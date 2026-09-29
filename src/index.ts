@@ -1,6 +1,7 @@
 export { Cookidoo, normalizeHref, type CookidooOptions } from './client.ts';
 export {
   AuthRequiredError,
+  CookidooHttpError,
   isExpiring,
   memoryTokenStore,
   parseRedirect,

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- HTTP errors are now `CookidooHttpError`, with `status` and the response `body`; the message includes what Cookidoo answered, which usually says which field was rejected.
+- Known issue: in the first real test, `createCustomRecipe` got HTTP 400 on the PATCH that fills in the recipe (listing, reading, copying and deleting worked). Under investigation.
+
 ## 0.2.0
 
 - **My recipes:** `listCustomRecipes`, `getCustomRecipe`, `createCustomRecipe`, `copyRecipeToCustom`, `updateCustomRecipe` and `removeCustomRecipe`, with typed steps, Thermomix settings and annotations. Ported from cookidoo-api.

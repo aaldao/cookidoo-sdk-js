@@ -23,6 +23,19 @@ export class AuthRequiredError extends Error {
   }
 }
 
+/** Cookidoo answered with an error status. `body` is the response text, which often says what was rejected. */
+export class CookidooHttpError extends Error {
+  readonly status: number;
+  readonly body: string;
+  constructor(request: string, status: number, body: string) {
+    const detail = body.trim().replace(/\s+/g, ' ').slice(0, 500);
+    super(`${request} → HTTP ${String(status)}${detail ? `: ${detail}` : ''}`);
+    this.name = 'CookidooHttpError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 /**
  * Where tokens are persisted. On a phone, use the Keychain/Keystore
  * (expo-secure-store); on Node, a file with 600 permissions or whatever you prefer.

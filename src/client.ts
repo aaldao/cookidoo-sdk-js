@@ -1,5 +1,6 @@
 import {
   AuthRequiredError,
+  CookidooHttpError,
   memoryTokenStore,
   Session,
   type PendingLogin,
@@ -498,7 +499,7 @@ export class Cookidoo {
           continue;
         }
         if (r.status === 401) throw new AuthRequiredError();
-        if (!r.ok) throw new Error(`${method} ${path} → HTTP ${r.status}`);
+        if (!r.ok) throw new CookidooHttpError(`${method} ${path}`, r.status, await r.text().catch(() => ''));
         // Some endpoints (remove, PATCH) reply with an empty body.
         const text = await r.text();
         return (text ? JSON.parse(text) : null) as T;

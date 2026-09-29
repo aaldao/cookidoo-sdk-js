@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { memoryTokenStore } from '../src/auth.ts';
+import { CookidooHttpError, memoryTokenStore } from '../src/auth.ts';
 import { Cookidoo } from '../src/client.ts';
 import { URUGUAY } from '../src/config.ts';
 import {
@@ -233,11 +233,18 @@ test('create: empty recipe, fill it in with PATCH, reload it', async () => {
 });
 
 test('create: if filling in fails, the error carries the orphaned recipe id', async () => {
-  const { c } = client((x) => (x.method === 'POST' ? { status: 200, body: { recipeId: 'orphan' } } : { status: 500 }));
+  const { c } = client((x) =>
+    x.method === 'POST'
+      ? { status: 200, body: { recipeId: 'orphan' } }
+      : { status: 400, body: { message: 'yield.unitText: must be one of [portion, gram]' } },
+  );
   await assert.rejects(c.createCustomRecipe(minimal), (e: unknown) => {
     assert.ok(e instanceof IncompleteCustomRecipeError);
     assert.equal(e.recipeId, 'orphan');
-    assert.match(String(e.cause), /HTTP 500/);
+    // The server's explanation is part of the message, and available as-is on the cause.
+    assert.ok(e.cause instanceof CookidooHttpError);
+    assert.equal(e.cause.status, 400);
+    assert.match(e.cause.message, /PATCH created-recipes\/es\/orphan → HTTP 400: .*unitText: must be one of/);
     return true;
   });
 });

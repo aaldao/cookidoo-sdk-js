@@ -61,7 +61,7 @@ Vorwerk only accepts the official app's redirect URI (`com.vorwerk.cookidoo://co
 3. Vorwerk redirects to `com.vorwerk.cookidoo://code-grant?code=…&state=…`. Intercept that URL instead of opening it.
 4. `await cookidoo.finishLogin(pending, redirectUrl)` exchanges the code for tokens and saves them to the `tokenStore`.
 
-If a request throws `AuthRequiredError`, the session has expired and the user has to log in again.
+If a request throws `AuthRequiredError`, the session has expired and the user has to log in again. Other error statuses throw `CookidooHttpError`, with `status` and the response `body`.
 
 ## Expo / React Native
 
