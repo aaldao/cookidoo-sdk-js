@@ -10,6 +10,7 @@ An **unofficial** JavaScript/TypeScript client for Cookidoo. The same code runs 
 - Automatic token refresh, one at a time, because the server rotates the refresh token.
 - Reads the shopping list and the weekly meal plan.
 - Writes to the shopping list: check/uncheck ingredients and additional items, and add, rename or remove additional items.
+- **My recipes:** list, read, create, copy from a Cookidoo recipe, update and delete your own recipes, including Thermomix settings (time/temperature/speed, guided modes) linked to the step text.
 - Shopping list helpers: a unified view that merges ingredients across recipes (ES/PT/EN synonyms, quantities added up per unit), a by-recipe view, and unchecked-first ordering.
 
 > [!WARNING]
@@ -45,6 +46,8 @@ npm install
 node examples/cli.ts login   # walks you through logging in with your browser
 node examples/cli.ts list
 node examples/cli.ts week
+node examples/cli.ts recipes
+node examples/cli.ts create-recipe examples/recipe.json
 ```
 
 Tokens are stored in `.cookidoo-tokens.json`, readable only by your user and ignored by git. The refresh token grants access to your account, so don't share it.
@@ -132,7 +135,46 @@ This works in Expo Go (SDK 57).
 | `renameAdditionalItem(id, name)` | Renames an additional item |
 | `removeAdditionalItems(ids)` | Removes additional items |
 
+| `listCustomRecipes()` / `getCustomRecipe(id)` | Your recipes in "My recipes" |
+| `createCustomRecipe(recipe)` | Creates a recipe (see below) |
+| `copyRecipeToCustom(recipeId, servingSize)` | Copies a Cookidoo recipe (e.g. `"r166987"`) into "My recipes" |
+| `updateCustomRecipe(id, changes)` | Updates the given fields; the rest keep their value |
+| `removeCustomRecipe(id)` | Deletes one of your recipes |
+
 Shopping list helpers: `unifyIngredients`, `ingredientsByRecipe`, `pendingFirst`, `normalizeName`, `cleanIngredientName`, `sumAmounts`.
+
+## My recipes
+
+```ts
+const recipe = await cookidoo.createCustomRecipe({
+  name: 'Bread',
+  ingredients: ['500 g flour', '300 g water', '10 g salt'],
+  instructions: [
+    {
+      text: 'Add the flour and water, then knead 3 min.',
+      annotations: [
+        { type: 'INGREDIENT', slot: 'flour', description: '500 g flour' },
+        { type: 'MODE', slot: 'knead 3 min', mode: 'dough', time: 180 },
+      ],
+    },
+    'Let it rise for 1 hour and bake at 220 °C for 30 minutes.',
+  ],
+  servingSize: 1,
+  unitText: 'loaf',
+  activeTime: 600, // seconds
+  totalTime: 6000,
+  tools: ['TM6', 'TM7'],
+});
+```
+
+- **Steps** are plain strings, or objects with `settings` (`time`, `temperature`, `speed`) and `annotations`.
+- **Annotations** link a piece of the step's text (`slot`, which must appear in the text verbatim) to an ingredient (`INGREDIENT`, whose `description` must be one of `ingredients`), Thermomix settings (`TTS`: time in seconds, temperature, speed, direction) or a guided mode (`MODE`: dough, browning, steaming…). Annotations this library doesn't model come back as `OTHER` and are preserved when you update the recipe.
+- **Everything is validated locally** before sending anything; errors are `RecipeValidationError`.
+- **Creating takes 3 requests** (create an empty recipe, fill it in, reload it). If filling it in fails, you get an `IncompleteCustomRecipeError` with the `recipeId` of the empty recipe left in your account, so you can retry with `updateCustomRecipe` or delete it.
+- **Updating also takes 3 requests** (load, save, reload). Leaving `image` out keeps your photo; `image` must be a customer-recipe path or filename, not a display URL. Uploading photos isn't supported.
+- **Rate limit:** Cookidoo allows about 10 requests per minute on this service.
+
+[`examples/recipe.json`](examples/recipe.json) is a complete example you can create with the CLI and then delete.
 
 ### Localization
 
@@ -143,6 +185,7 @@ Shopping list helpers: `unifyIngredients`, `ingredientsByRecipe`, `pendingFirst`
 This is an unofficial API, so the client is deliberately conservative:
 
 - **One request at a time:** each `Cookidoo` instance queues all its requests, so they never run in parallel.
+- **Local validation first:** invalid recipes are rejected before any request is sent.
 - **No retry loops:** on a 401 it refreshes once and retries once. If that fails too, it throws `AuthRequiredError`.
 - **Discovered endpoints:** paths come from `.well-known/home`, once per instance. If an endpoint isn't found, the known path is used and `usedFallbackPaths` is set.
 

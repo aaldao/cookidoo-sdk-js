@@ -27,4 +27,26 @@ export {
   type Row,
   type RowGroup,
 } from './shopping.ts';
+export {
+  IncompleteCustomRecipeError,
+  RecipeValidationError,
+  type Annotation,
+  type BrowningPower,
+  type CustomRecipe,
+  type CustomRecipeUpdate,
+  type Direction,
+  type IngredientAnnotation,
+  type Instruction,
+  type MachineType,
+  type Mode,
+  type ModeAnnotation,
+  type NewCustomRecipe,
+  type OtherAnnotation,
+  type Speed,
+  type SteamingAccessory,
+  type StepSettings,
+  type Temperature,
+  type TemperatureSetting,
+  type TTSAnnotation,
+} from './recipes.ts';
 export type { Amount, OwnershipChange, ShoppingItem, ShoppingList, WeekDay } from './types.ts';

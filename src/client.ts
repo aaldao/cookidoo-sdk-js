@@ -8,6 +8,17 @@ import {
 } from './auth.ts';
 import { DEFAULT_USER_AGENT, type Localization } from './config.ts';
 import { webCrypto, type CryptoAdapter } from './pkce.ts';
+import {
+  buildCustomRecipePayload,
+  imageForPayload,
+  IncompleteCustomRecipeError,
+  parseCustomRecipe,
+  RecipeValidationError,
+  validateImage,
+  type CustomRecipe,
+  type CustomRecipeUpdate,
+  type NewCustomRecipe,
+} from './recipes.ts';
 import { cleanIngredientName } from './shopping.ts';
 import type { Amount, OwnershipChange, ShoppingItem, ShoppingList, WeekDay } from './types.ts';
 
@@ -77,22 +88,53 @@ const RELS = {
     rel: 'pantry:remove-additional-items',
     fallback: 'shopping/{language}/additional-items/remove',
   },
+  recipeDetails: {
+    service: 'recipes/recipe',
+    rel: 'recipe:details',
+    fallback: 'recipes/recipe/{language}/{id}',
+  },
+  customRecipes: {
+    service: 'created-recipes',
+    rel: 'customer-recipes:recipe-create',
+    fallback: 'created-recipes/{language}',
+  },
+  customRecipe: {
+    service: 'created-recipes',
+    rel: 'customer-recipes:recipe-details',
+    fallback: 'created-recipes/{language}/{id}',
+  },
 } as const;
 type RelKey = keyof typeof RELS;
 type HalLink = { href?: unknown };
 
-const TOKEN_NAMES: Record<string, string> = { lang: 'language', dayKey: 'day' };
+/**
+ * Cookidoo's token names, mapped to the names of ours they may stand for. A
+ * known token must line up with one of them; an unknown one is substituted by
+ * position (same rules as well_known.py in cookidoo-api).
+ */
+const TOKEN_ALIASES: Record<string, string[]> = {
+  lang: ['language', 'locale'],
+  id: ['id'],
+  dayKey: ['day'],
+  recipeId: ['recipe'],
+};
+const TOKEN_RE = /\{(\/?)([A-Za-z0-9_]+)\}/g;
 
-/** Turns a HAL href into our path template: drops the host and {?query}, renames tokens. */
-export function normalizeHref(href: string): string | null {
-  let path = href.replace(/^https?:\/\/[^/]+/, '').replace(/\{[?&].*$/, '');
-  let ok = true;
-  path = path.replace(/\{(\/?)([A-Za-z0-9_]+)\}/g, (_m, slash: string, name: string) => {
-    const ours = TOKEN_NAMES[name];
-    if (!ours) ok = false;
-    return `${slash}{${ours ?? name}}`;
-  });
-  return ok ? path.replace(/^\/+/, '') : null;
+/**
+ * Turns a discovered HAL href into our template `shape`: keeps the live path
+ * segments, drops the host and {?query}, and uses our variable names. Returns
+ * null if the variables don't line up with the shape.
+ */
+export function normalizeHref(href: string, shape: string): string | null {
+  const path = href.replace(/^https?:\/\/[^/]+/, '').replace(/\{[?&].*$/, '');
+  const ours = [...shape.matchAll(TOKEN_RE)].map((m) => m[2]);
+  const theirs = [...path.matchAll(TOKEN_RE)].map((m) => m[2]);
+  if (ours.length !== theirs.length) return null;
+  if (theirs.some((name, i) => TOKEN_ALIASES[name] && !TOKEN_ALIASES[name].includes(ours[i]))) {
+    return null;
+  }
+  let i = 0;
+  return path.replace(TOKEN_RE, (_m, slash: string) => `${slash}{${ours[i++]}}`).replace(/^\/+/, '');
 }
 
 function fill(template: string, vars: Record<string, string>): string {
@@ -278,6 +320,110 @@ export class Cookidoo {
     await this.postJson(fill(p.additionalRemove, this.lang()), { additionalItemIDs: ids });
   }
 
+  // --- My recipes (custom recipes) -------------------------------------------
+  // Note: Cookidoo rate-limits this service (10 requests per minute observed).
+
+  async listCustomRecipes(): Promise<CustomRecipe[]> {
+    const p = await this.resolvePaths();
+    const res = await this.getJson<{ items?: unknown }>(fill(p.customRecipes, this.lang()), CUSTOM_RECIPE_ACCEPT);
+    if (!Array.isArray(res.items)) throw new Error('Unexpected custom recipe list response');
+    return res.items.map((r) => this.toCustomRecipe(r));
+  }
+
+  async getCustomRecipe(id: string): Promise<CustomRecipe> {
+    const p = await this.resolvePaths();
+    return this.toCustomRecipe(
+      await this.getJson(fill(p.customRecipe, { ...this.lang(), id }), CUSTOM_RECIPE_ACCEPT),
+    );
+  }
+
+  /**
+   * Creates a recipe in "My recipes" (3 requests: create an empty recipe, fill
+   * it in, reload it). Validates everything locally first. If filling in fails
+   * after the empty recipe exists, throws IncompleteCustomRecipeError with its id.
+   */
+  async createCustomRecipe(recipe: NewCustomRecipe): Promise<CustomRecipe> {
+    validateImage(recipe.image);
+    const payload = buildCustomRecipePayload({
+      name: recipe.name,
+      ingredients: recipe.ingredients,
+      instructions: recipe.instructions,
+      servingSize: recipe.servingSize,
+      activeTime: recipe.activeTime,
+      totalTime: recipe.totalTime,
+      tools: recipe.tools?.length ? recipe.tools : ['TM7'],
+      unitText: recipe.unitText ?? 'portion',
+      image: recipe.image ?? null,
+      imageOwnedByUser: recipe.image !== undefined,
+      hints: recipe.hints ?? [],
+      workStatus: recipe.workStatus ?? 'PRIVATE',
+      requiresAnnotationsCheck: recipe.requiresAnnotationsCheck ?? false,
+    });
+    const p = await this.resolvePaths();
+    const created = await this.postJson<{ recipeId?: unknown } | null>(fill(p.customRecipes, this.lang()), {
+      recipeName: recipe.name,
+    });
+    const id = created?.recipeId;
+    if (typeof id !== 'string' || !id) throw new Error('No recipe id returned when creating the recipe');
+    try {
+      await this.sendJson('PATCH', fill(p.customRecipe, { ...this.lang(), id }), payload);
+      return await this.getCustomRecipe(id);
+    } catch (e) {
+      throw new IncompleteCustomRecipeError(id, e);
+    }
+  }
+
+  /** Copies a Cookidoo recipe (e.g. "r166987") into "My recipes" so you can edit it. */
+  async copyRecipeToCustom(recipeId: string, servingSize: number): Promise<CustomRecipe> {
+    const p = await this.resolvePaths();
+    const recipeUrl = `${this.localization.apiEndpoint}/${fill(p.recipeDetails, { ...this.lang(), id: recipeId })}`;
+    return this.toCustomRecipe(
+      await this.postJson(fill(p.customRecipes, this.lang()), { recipeUrl, servingSize }),
+    );
+  }
+
+  /**
+   * Updates the given fields; the rest keep their current value (3 requests:
+   * load, save, reload). Leaving `image` out keeps the current photo.
+   */
+  async updateCustomRecipe(id: string, changes: CustomRecipeUpdate): Promise<CustomRecipe> {
+    validateImage(changes.image);
+    const current = await this.getCustomRecipe(id);
+    const image = changes.image ?? current.image;
+    // The user's own photo only survives if its path can be recovered from the display URL.
+    if (changes.image === undefined && current.imageOwnedByUser && image !== null && imageForPayload(image) === null) {
+      throw new RecipeValidationError('Cannot preserve the existing custom recipe image.');
+    }
+    const payload = buildCustomRecipePayload({
+      name: changes.name ?? current.name,
+      ingredients: changes.ingredients ?? current.ingredients,
+      instructions: changes.instructions ?? current.instructions,
+      servingSize: changes.servingSize ?? current.servingSize,
+      activeTime: changes.activeTime ?? current.activeTime,
+      totalTime: changes.totalTime ?? current.totalTime,
+      tools: changes.tools ?? current.tools,
+      unitText: changes.unitText ?? current.unitText,
+      image,
+      imageOwnedByUser:
+        changes.imageOwnedByUser ?? (changes.image !== undefined ? true : current.imageOwnedByUser),
+      hints: changes.hints ?? current.hints,
+      workStatus: changes.workStatus ?? current.workStatus,
+      requiresAnnotationsCheck: changes.requiresAnnotationsCheck ?? current.requiresAnnotationsCheck,
+    });
+    const p = await this.resolvePaths();
+    await this.sendJson('PATCH', fill(p.customRecipe, { ...this.lang(), id }), payload);
+    return this.getCustomRecipe(id);
+  }
+
+  async removeCustomRecipe(id: string): Promise<void> {
+    const p = await this.resolvePaths();
+    await this.sendJson('DELETE', fill(p.customRecipe, { ...this.lang(), id }));
+  }
+
+  private toCustomRecipe(json: unknown): CustomRecipe {
+    return parseCustomRecipe(json, this.localization.apiEndpoint, this.localization.language);
+  }
+
   // --- Internals ------------------------------------------------------------
 
   private lang() {
@@ -316,7 +462,7 @@ export class Cookidoo {
       // HAL allows either a single link or a list of links per rel.
       const raw = links[rel] as HalLink | HalLink[] | undefined;
       const href = (Array.isArray(raw) ? raw[0] : raw)?.href;
-      const normalized = typeof href === 'string' ? normalizeHref(href) : null;
+      const normalized = typeof href === 'string' ? normalizeHref(href, fallback) : null;
       if (normalized) {
         out[key] = normalized;
       } else {
@@ -327,7 +473,12 @@ export class Cookidoo {
     return out;
   }
 
-  private sendJson<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  private sendJson<T>(
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    path: string,
+    body?: unknown,
+    accept = 'application/json',
+  ): Promise<T> {
     return this.serial(async () => {
       const url = `${this.localization.apiEndpoint}/${path}`;
       let tokens = await this.session.validTokens();
@@ -335,7 +486,7 @@ export class Cookidoo {
         const r = await this.fetch(url, {
           method,
           headers: {
-            Accept: 'application/json',
+            Accept: accept,
             Authorization: `Bearer ${tokens.accessToken}`,
             ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           },
@@ -348,7 +499,7 @@ export class Cookidoo {
         }
         if (r.status === 401) throw new AuthRequiredError();
         if (!r.ok) throw new Error(`${method} ${path} → HTTP ${r.status}`);
-        // Some endpoints (remove) reply with an empty body.
+        // Some endpoints (remove, PATCH) reply with an empty body.
         const text = await r.text();
         return (text ? JSON.parse(text) : null) as T;
       }
@@ -356,8 +507,8 @@ export class Cookidoo {
     });
   }
 
-  private getJson<T>(path: string): Promise<T> {
-    return this.sendJson<T>('GET', path);
+  private getJson<T>(path: string, accept?: string): Promise<T> {
+    return this.sendJson<T>('GET', path, undefined, accept);
   }
 
   private postJson<T = unknown>(path: string, body: unknown): Promise<T> {
@@ -366,3 +517,6 @@ export class Cookidoo {
 }
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+/** The created-recipes service only returns full recipes with this media type. */
+const CUSTOM_RECIPE_ACCEPT = 'application/vnd.vorwerk.customer-recipe.full+json';

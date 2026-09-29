@@ -4,42 +4,21 @@ import { test } from 'node:test';
 import { memoryTokenStore, parseRedirect, type Tokens } from '../src/auth.ts';
 import { Cookidoo, normalizeHref } from '../src/client.ts';
 import { URUGUAY } from '../src/config.ts';
+import { fakeFetch, path } from './fake-fetch.ts';
 
 const later = () => Date.now() / 1000 + 9999;
 
-type Call = { method: string; url: string; body?: string; auth?: string };
-
-/** Fake fetch: records calls and tracks how many are in flight at once. */
-function fakeFetch(respond: (c: Call) => { status: number; body?: unknown }) {
-  const calls: Call[] = [];
-  let active = 0;
-  let maxActive = 0;
-  const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const headers = (init?.headers ?? {}) as Record<string, string>;
-    const call: Call = {
-      method: init?.method ?? 'GET',
-      url: input instanceof Request ? input.url : input.toString(),
-      body: init?.body as string | undefined,
-      auth: headers.Authorization,
-    };
-    calls.push(call);
-    active++;
-    maxActive = Math.max(maxActive, active);
-    await new Promise((r) => setTimeout(r, 5));
-    active--;
-    const { status, body } = respond(call);
-    const text = body === undefined ? '' : JSON.stringify(body);
-    return new Response(status === 204 ? null : text, { status });
-  }) as typeof globalThis.fetch;
-  return { fetch, calls, maxActive: () => maxActive };
-}
-
-const path = (url: string) => url.replace(/^https?:\/\/[^/]+\//, '');
-
 test('normalizeHref', () => {
-  assert.equal(normalizeHref('https://cookidoo.international/shopping/{lang}'), 'shopping/{language}');
-  assert.equal(normalizeHref('/planning/{lang}/api/my-week/{dayKey}{?x,y}'), 'planning/{language}/api/my-week/{day}');
-  assert.equal(normalizeHref('/x/{weird}'), null);
+  assert.equal(normalizeHref('https://cookidoo.international/shopping/{lang}', 'shopping/{language}'), 'shopping/{language}');
+  assert.equal(
+    normalizeHref('/planning/{lang}/api/my-week/{dayKey}{?x,y}', 'planning/{language}/api/my-week/{day}'),
+    'planning/{language}/api/my-week/{day}',
+  );
+  // Live path segments win; unknown token names are substituted by position.
+  assert.equal(normalizeHref('/created-recipes/{lang}/v2/{recipe}', 'created-recipes/{language}/{id}'), 'created-recipes/{language}/v2/{id}');
+  // A different number of variables, or a known token in the wrong place, is rejected.
+  assert.equal(normalizeHref('/x/{lang}/{id}', 'x/{language}'), null);
+  assert.equal(normalizeHref('/x/{id}/{lang}', 'x/{language}/{id}'), null);
 });
 
 test('parseRedirect', () => {
@@ -68,7 +47,8 @@ test('requests run one at a time and use the fallback paths', async () => {
   assert.equal(f.maxActive(), 1);
   assert.deepEqual(added.map((a) => a.id), ['n1']);
   assert.equal(c.usedFallbackPaths, true);
-  assert.equal(f.calls.filter((x) => x.url.endsWith('.well-known/home')).length, 2);
+  // One discovery document per service: shopping, planning, recipes/recipe, created-recipes.
+  assert.equal(f.calls.filter((x) => x.url.endsWith('.well-known/home')).length, 4);
   const posts = f.calls.filter((x) => x.method === 'POST');
   assert.deepEqual(posts.map((x) => path(x.url)), [
     'shopping/es/additional-items/add',

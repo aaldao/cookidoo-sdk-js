@@ -13,6 +13,8 @@ export default tseslint.config(
       // API responses are untyped JSON; "unnecessary" checks protect us if Vorwerk changes something.
       '@typescript-eslint/no-unnecessary-condition': 'off',
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+      // `const { dropped, ...rest } = obj` is the idiomatic way to omit a key.
+      '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
     },
   },
   {

@@ -5,6 +5,10 @@
  *   node examples/cli.ts list       # shopping list
  *   node examples/cli.ts week       # this week's meal plan
  *   node examples/cli.ts add bread  # add an additional item
+ *   node examples/cli.ts recipes    # "My recipes"
+ *   node examples/cli.ts recipe <id>
+ *   node examples/cli.ts create-recipe examples/recipe.json
+ *   node examples/cli.ts delete-recipe <id>
  *   node examples/cli.ts logout
  */
 import { readFile, rm, writeFile } from 'node:fs/promises';
@@ -13,8 +17,10 @@ import { createInterface } from 'node:readline/promises';
 import {
   AuthRequiredError,
   Cookidoo,
+  IncompleteCustomRecipeError,
   URUGUAY,
   unifyIngredients,
+  type NewCustomRecipe,
   type TokenStore,
   type Tokens,
 } from '../src/index.ts';
@@ -35,11 +41,14 @@ const fileStore: TokenStore = {
 };
 
 process.on('uncaughtException', (e) => {
-  console.error(
-    e instanceof AuthRequiredError ? 'Not logged in: run `node examples/cli.ts login` first.' : e.message,
-  );
+  if (e instanceof AuthRequiredError) console.error('Not logged in: run `node examples/cli.ts login` first.');
+  else if (e instanceof IncompleteCustomRecipeError)
+    console.error(`${e.message} (${String(e.cause)}). Delete it with: node examples/cli.ts delete-recipe ${e.recipeId}`);
+  else console.error(e.message);
   process.exit(1);
 });
+
+const minutes = (s: number) => `${String(Math.round(s / 60))} min`;
 
 // Change URUGUAY to your own country's localization (see README).
 const cookidoo = new Cookidoo({ localization: URUGUAY, tokenStore: fileStore });
@@ -80,10 +89,41 @@ switch (command) {
     console.log(`Added: ${created.map((c) => c.name).join(', ')}`);
     break;
   }
+  case 'recipes': {
+    for (const r of await cookidoo.listCustomRecipes()) {
+      console.log(`${r.id}  ${r.name} (${String(r.servingSize)} ${r.unitText}, ${minutes(r.totalTime)})`);
+    }
+    break;
+  }
+  case 'recipe': {
+    const r = await cookidoo.getCustomRecipe(args[0]);
+    console.log(`${r.name}\n${r.url}\n`);
+    console.log(`${String(r.servingSize)} ${r.unitText} · ${minutes(r.activeTime)} active · ${minutes(r.totalTime)} total · ${r.tools.join(', ')}\n`);
+    for (const i of r.ingredients) console.log(`- ${i}`);
+    console.log();
+    r.instructions.forEach((step, n) => {
+      console.log(`${String(n + 1)}. ${typeof step === 'string' ? step : step.text}`);
+    });
+    if (r.hints.length) console.log(`\nHints:\n${r.hints.join('\n')}`);
+    break;
+  }
+  case 'create-recipe': {
+    const recipe = JSON.parse(await readFile(args[0], 'utf8')) as NewCustomRecipe;
+    const created = await cookidoo.createCustomRecipe(recipe);
+    console.log(`Created ${created.id}: ${created.url}`);
+    break;
+  }
+  case 'delete-recipe':
+    await cookidoo.removeCustomRecipe(args[0]);
+    console.log('Recipe deleted.');
+    break;
   case 'logout':
     await cookidoo.logout();
     console.log('Tokens deleted.');
     break;
   default:
-    console.log('Usage: node examples/cli.ts login | list | week | add <name> | logout');
+    console.log(
+      'Usage: node examples/cli.ts login | list | week | add <name> | recipes | recipe <id> |\n' +
+        '       create-recipe <file.json> | delete-recipe <id> | logout',
+    );
 }
