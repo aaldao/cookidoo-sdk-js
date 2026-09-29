@@ -1,0 +1,48 @@
+{
+  "name": "cookidoo-sdk-js",
+  "version": "0.1.0",
+  "description": "Unofficial JavaScript/TypeScript client for Cookidoo. Runs on Node, React Native/Expo and any environment with fetch.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aaldao/cookidoo-sdk-js.git"
+  },
+  "homepage": "https://github.com/aaldao/cookidoo-sdk-js#readme",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "cookidoo",
+    "thermomix",
+    "react-native",
+    "expo",
+    "node",
+    "unofficial"
+  ],
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.0",
+    "eslint": "^10.11.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0"
+  }
+}

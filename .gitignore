@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Tokens written by the CLI example: never commit them
+.cookidoo-tokens.json
