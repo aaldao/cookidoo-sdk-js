@@ -49,5 +49,6 @@ export {
   type Temperature,
   type TemperatureSetting,
   type TTSAnnotation,
+  type YieldUnit,
 } from './recipes.ts';
 export type { Amount, OwnershipChange, ShoppingItem, ShoppingList, WeekDay } from './types.ts';

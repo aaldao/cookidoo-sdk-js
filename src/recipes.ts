@@ -8,6 +8,12 @@
 type Loose<T extends string> = T | (string & {});
 
 export type MachineType = Loose<'TM5' | 'TM6' | 'TM7' | 'TM31'>;
+/**
+ * The yield unit. Cookidoo only accepts a fixed list (anything else is an
+ * HTTP 400); these are the values seen in real recipes so far. Free text like
+ * "loaf" is rejected, so use e.g. 12 × "slice" instead.
+ */
+export type YieldUnit = Loose<'portion' | 'gram' | 'slice'>;
 export type Speed = Loose<
   | 'soft'
   | '0.5' | '1' | '1.5' | '2' | '2.5' | '3' | '3.5' | '4' | '4.5' | '5'
@@ -102,8 +108,7 @@ export type CustomRecipe = {
   ingredients: string[];
   instructions: Instruction[];
   servingSize: number;
-  /** E.g. "portion". */
-  unitText: string;
+  unitText: YieldUnit;
   /** Seconds. */
   activeTime: number;
   /** Seconds. */
@@ -133,8 +138,8 @@ export type NewCustomRecipe = {
   activeTime: number;
   /** Default: ["TM7"]. */
   tools?: MachineType[];
-  /** Default: "portion". */
-  unitText?: string;
+  /** Default: "portion". Must be one of Cookidoo's units (see YieldUnit). */
+  unitText?: YieldUnit;
   /** A customer-recipe image path or filename (not a display URL). */
   image?: string;
   hints?: string[];

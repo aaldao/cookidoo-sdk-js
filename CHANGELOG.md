@@ -1,9 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- `unitText` is typed as `YieldUnit`: Cookidoo only accepts a fixed list of yield units and rejects free text with HTTP 400 (found in the first real test, which used "pan"). Known values: `portion`, `gram`, `slice`. The README and `examples/recipe.json` used "loaf" and are fixed.
+
 ## 0.2.1
 
 - HTTP errors are now `CookidooHttpError`, with `status` and the response `body`; the message includes what Cookidoo answered, which usually says which field was rejected.
-- Known issue: in the first real test, `createCustomRecipe` got HTTP 400 on the PATCH that fills in the recipe (listing, reading, copying and deleting worked). Under investigation.
 
 ## 0.2.0
 

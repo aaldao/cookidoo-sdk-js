@@ -130,7 +130,7 @@ test('payload: settings, annotations, defaults and derived times', () => {
       },
     ],
     tools: ['TM6'],
-    unitText: 'pan',
+    unitText: 'slice',
     image: null,
     imageOwnedByUser: false,
     hints: ['Tapar mientras leva.', 'Se puede congelar.'],
@@ -142,7 +142,7 @@ test('payload: settings, annotations, defaults and derived times', () => {
     image: null,
     isImageOwnedByUser: false,
     tools: ['TM6'],
-    yield: { value: 1, unitText: 'pan' },
+    yield: { value: 1, unitText: 'slice' },
     prepTime: 600,
     cookTime: 3000,
     totalTime: 3600,
@@ -236,7 +236,16 @@ test('create: if filling in fails, the error carries the orphaned recipe id', as
   const { c } = client((x) =>
     x.method === 'POST'
       ? { status: 200, body: { recipeId: 'orphan' } }
-      : { status: 400, body: { message: 'yield.unitText: must be one of [portion, gram]' } },
+      : // The real answer Cookidoo gave to unitText "pan".
+        {
+          status: 400,
+          body: {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: 'body/yield must be null, body/yield/unitText must be equal to one of the allowed values, body/yield must match a schema in anyOf',
+            code: 'validationError',
+          },
+        },
   );
   await assert.rejects(c.createCustomRecipe(minimal), (e: unknown) => {
     assert.ok(e instanceof IncompleteCustomRecipeError);
@@ -244,7 +253,7 @@ test('create: if filling in fails, the error carries the orphaned recipe id', as
     // The server's explanation is part of the message, and available as-is on the cause.
     assert.ok(e.cause instanceof CookidooHttpError);
     assert.equal(e.cause.status, 400);
-    assert.match(e.cause.message, /PATCH created-recipes\/es\/orphan → HTTP 400: .*unitText: must be one of/);
+    assert.match(e.cause.message, /PATCH created-recipes\/es\/orphan → HTTP 400: .*unitText must be equal to one of the allowed values/);
     return true;
   });
 });

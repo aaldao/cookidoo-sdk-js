@@ -20,8 +20,8 @@
     },
     "Let it rise for 1 hour, shape and bake at 220 °C for 30 minutes."
   ],
-  "servingSize": 1,
-  "unitText": "loaf",
+  "servingSize": 12,
+  "unitText": "slice",
   "activeTime": 600,
   "totalTime": 6000,
   "tools": ["TM6", "TM7"],
