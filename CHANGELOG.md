@@ -3,6 +3,7 @@
 ## 0.2.2
 
 - `unitText` is typed as `YieldUnit`: Cookidoo only accepts a fixed list of yield units and rejects free text with HTTP 400 (found in the first real test, which used "pan"). Known values: `portion`, `gram`, `slice`. The README and `examples/recipe.json` used "loaf" and are fixed.
+- Verified against a real account (Uruguay, 2026-09-29) from React Native/Expo Go: list, get, copy, delete, and create/update both a plain recipe and one with ingredient, TTS (time/temperature/speed) and MODE (dough) annotations.
 
 ## 0.2.1
 
