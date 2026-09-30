@@ -19,12 +19,10 @@ An **unofficial** JavaScript/TypeScript client for Cookidoo. The same code runs 
 ## Installation
 
 ```bash
-npm install github:aaldao/cookidoo-sdk-js
+npm install cookidoo-sdk-js
 ```
 
-npm (and yarn) clone the repo and build `dist/` on install, through the `prepare` script.
-
-**bun** and **pnpm 10** don't run dependency scripts by default, so allow it first. With bun, add `"trustedDependencies": ["cookidoo-sdk-js"]` to your `package.json`; with pnpm, run `pnpm approve-builds`.
+The package ships compiled JavaScript and type definitions, and has no runtime dependencies.
 
 ## Quick start (Node 22.18+)
 
