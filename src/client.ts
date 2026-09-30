@@ -21,7 +21,16 @@ import {
   type NewCustomRecipe,
 } from './recipes.ts';
 import { cleanIngredientName } from './shopping.ts';
-import type { Amount, OwnershipChange, ShoppingItem, ShoppingList, WeekDay } from './types.ts';
+import type {
+  Account,
+  Amount,
+  OwnershipChange,
+  ShoppingItem,
+  ShoppingList,
+  Subscription,
+  UserInfo,
+  WeekDay,
+} from './types.ts';
 
 // ---------------------------------------------------------------------------
 // Raw API types (subset of raw_types.py in cookidoo-api)
@@ -45,6 +54,38 @@ type PantryJSON = {
   additionalItems: AdditionalItemJSON[];
 };
 
+type CommunityProfileJSON = {
+  id?: unknown;
+  isPublic?: unknown;
+  userInfo?: { username?: unknown; description?: unknown; picture?: unknown };
+};
+
+/** OIDC userinfo, plus Vorwerk's own fields. */
+type AccountJSON = {
+  sub?: unknown;
+  email?: unknown;
+  email_verified?: unknown;
+  name?: unknown;
+  given_name?: unknown;
+  family_name?: unknown;
+  preferred_username?: unknown;
+  picture?: unknown;
+  locale?: unknown;
+  createdTime?: unknown;
+  customFields?: { country_of_residence?: unknown };
+};
+
+type SubscriptionJSON = {
+  active?: unknown;
+  status?: unknown;
+  type?: unknown;
+  extendedType?: unknown;
+  subscriptionLevel?: unknown;
+  subscriptionSource?: unknown;
+  startDate?: unknown;
+  expires?: unknown;
+};
+
 type DayRecipeJSON = { id: string; title: string; totalTime?: number | null };
 type CalendarDayJSON = {
   id: string;
@@ -58,6 +99,16 @@ type CalendarDayJSON = {
 // Endpoint discovery (.well-known/home, like well_known.py in cookidoo-api)
 
 const RELS = {
+  userProfile: {
+    service: 'community/profile',
+    rel: 'community-profile:user-private-profile',
+    fallback: 'community/profile/{language}',
+  },
+  subscriptions: {
+    service: 'ownership',
+    rel: 'ownership:subscriptions',
+    fallback: 'ownership/subscriptions',
+  },
   pantryHome: { service: 'shopping', rel: 'pantry:home', fallback: 'shopping/{language}' },
   myWeek: {
     service: 'planning',
@@ -178,6 +229,8 @@ function toAdditional(a: AdditionalItemJSON): ShoppingItem {
   return { id: a.id, name: a.name, detail: '', isOwned: a.isOwned, amount: null, unit: '' };
 }
 
+const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+
 function isoDate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -252,6 +305,64 @@ export class Cookidoo {
   }
 
   // --- Reading --------------------------------------------------------------
+
+  /** The user's Cookidoo community profile: username, description and picture. */
+  async getUserInfo(): Promise<UserInfo> {
+    const p = await this.resolvePaths();
+    const data = await this.getJson<CommunityProfileJSON | null>(fill(p.userProfile, this.lang()));
+    const info = data?.userInfo;
+    if (typeof data?.id !== 'string' || typeof info?.username !== 'string') {
+      throw new Error('Unexpected user info response');
+    }
+    return {
+      id: data.id,
+      username: info.username,
+      description: str(info.description),
+      picture: str(info.picture),
+      isPublic: data.isPublic === true,
+    };
+  }
+
+  /** The Vorwerk account behind the login (OIDC userinfo): email, name, country… */
+  async getAccount(): Promise<Account> {
+    const url = await this.serial(() => this.session.userInfoEndpoint());
+    const data = await this.getJson<AccountJSON | null>(url);
+    if (typeof data?.sub !== 'string' || typeof data.email !== 'string') {
+      throw new Error('Unexpected account response');
+    }
+    return {
+      id: data.sub,
+      email: data.email,
+      emailVerified: data.email_verified === true,
+      name: str(data.name),
+      givenName: str(data.given_name),
+      familyName: str(data.family_name),
+      username: str(data.preferred_username),
+      picture: str(data.picture),
+      locale: str(data.locale),
+      country: str(data.customFields?.country_of_residence),
+      createdAt: str(data.createdTime),
+    };
+  }
+
+  /** The active Cookidoo subscription, or null if there is none. */
+  async getSubscription(): Promise<Subscription | null> {
+    const p = await this.resolvePaths();
+    const data = await this.getJson<unknown>(fill(p.subscriptions, this.lang()));
+    if (!Array.isArray(data)) throw new Error('Unexpected subscription response');
+    const s = (data as (SubscriptionJSON | null)[]).find((x) => x?.active === true);
+    if (!s) return null;
+    return {
+      active: true,
+      status: str(s.status) ?? '',
+      type: str(s.type) ?? '',
+      extendedType: str(s.extendedType),
+      level: str(s.subscriptionLevel) ?? '',
+      source: str(s.subscriptionSource) ?? '',
+      startDate: str(s.startDate),
+      expires: str(s.expires),
+    };
+  }
 
   async getShoppingList(): Promise<ShoppingList> {
     const p = await this.resolvePaths();
@@ -481,7 +592,7 @@ export class Cookidoo {
     accept = 'application/json',
   ): Promise<T> {
     return this.serial(async () => {
-      const url = `${this.localization.apiEndpoint}/${path}`;
+      const url = /^https?:\/\//.test(path) ? path : `${this.localization.apiEndpoint}/${path}`;
       let tokens = await this.session.validTokens();
       for (let attempt = 0; attempt < 2; attempt++) {
         const r = await this.fetch(url, {

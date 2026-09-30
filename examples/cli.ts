@@ -70,6 +70,15 @@ switch (command) {
     console.log(`Done, tokens saved to ${TOKENS_FILE}.`);
     break;
   }
+  case 'me': {
+    const account = await cookidoo.getAccount();
+    const profile = await cookidoo.getUserInfo();
+    const sub = await cookidoo.getSubscription();
+    console.log(`${account.name ?? account.username ?? '—'} <${account.email}> (${account.country ?? '?'})`);
+    console.log(`Community profile: ${profile.username}${profile.isPublic ? ' (public)' : ''}`);
+    console.log(sub ? `Subscription: ${sub.level}, expires ${sub.expires?.slice(0, 10) ?? '?'}` : 'No active subscription');
+    break;
+  }
   case 'list': {
     const list = await cookidoo.getShoppingList();
     for (const r of unifyIngredients(list.ingredients)) {
@@ -123,7 +132,7 @@ switch (command) {
     break;
   default:
     console.log(
-      'Usage: node examples/cli.ts login | list | week | add <name> | recipes | recipe <id> |\n' +
+      'Usage: node examples/cli.ts login | me | list | week | add <name> | recipes | recipe <id> |\n' +
         '       create-recipe <file.json> | delete-recipe <id> | logout',
     );
 }

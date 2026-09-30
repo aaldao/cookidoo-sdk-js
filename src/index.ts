@@ -55,4 +55,13 @@ export {
   type TTSAnnotation,
   type YieldUnit,
 } from './recipes.ts';
-export type { Amount, OwnershipChange, ShoppingItem, ShoppingList, WeekDay } from './types.ts';
+export type {
+  Account,
+  Amount,
+  OwnershipChange,
+  ShoppingItem,
+  ShoppingList,
+  Subscription,
+  UserInfo,
+  WeekDay,
+} from './types.ts';

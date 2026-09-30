@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- `getAccount()` returns the Vorwerk account from the OIDC userinfo endpoint: email, name, username, picture, locale, country of residence and creation date (`Account`).
+- `getUserInfo()` returns the Cookidoo community profile: `id`, `username`, `description`, `picture` and `isPublic` (`UserInfo`). Ported from cookidoo-api.
+- `getSubscription()` returns the active subscription (level, status, start and expiry dates), or `null` (`Subscription`). Ported from cookidoo-api.
+- Endpoint discovery now also reads `community/profile` and `ownership`.
+
 ## 0.3.1
 
 - **Published on npm** as `cookidoo-sdk-js` (`npm install cookidoo-sdk-js`). Installing from GitHub is no longer needed. No code changes since 0.3.0.

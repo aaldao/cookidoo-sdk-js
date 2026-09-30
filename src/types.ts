@@ -26,4 +26,48 @@ export type WeekDay = {
   recipes: { id: string; name: string }[];
 };
 
+export type UserInfo = {
+  id: string;
+  username: string;
+  description: string | null;
+  /** Profile picture URL, if the user has one. */
+  picture: string | null;
+  isPublic: boolean;
+};
+
+/** The Vorwerk account (OIDC userinfo). Missing fields are null. */
+export type Account = {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+  name: string | null;
+  givenName: string | null;
+  familyName: string | null;
+  username: string | null;
+  picture: string | null;
+  /** e.g. "es". */
+  locale: string | null;
+  /** Country of residence, e.g. "UY". */
+  country: string | null;
+  /** ISO 8601, e.g. "2020-01-02T03:04:05Z". */
+  createdAt: string | null;
+};
+
+export type Subscription = {
+  active: boolean;
+  /** e.g. "ACTIVE". */
+  status: string;
+  /** e.g. "REGULAR". */
+  type: string;
+  extendedType: string | null;
+  /** e.g. "FULL". */
+  level: string;
+  /** e.g. "COMMERCE". */
+  source: string;
+  /** ISO 8601. */
+  startDate: string | null;
+  /** ISO 8601. */
+  expires: string | null;
+};
+
 export type OwnershipChange = { id: string; isOwned: boolean };

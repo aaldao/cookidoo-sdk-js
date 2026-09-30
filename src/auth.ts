@@ -89,7 +89,7 @@ function toTokens(payload: Record<string, unknown>, previousRefresh?: string): T
   return { accessToken, refreshToken, expiresAt: Date.now() / 1000 + expiresIn };
 }
 
-type Oidc = { authorization_endpoint: string; token_endpoint: string };
+type Oidc = { authorization_endpoint: string; token_endpoint: string; userinfo_endpoint?: string };
 
 export type SessionOptions = {
   localization: Localization;
@@ -121,6 +121,13 @@ export class Session {
       throw e;
     });
     return this.oidc;
+  }
+
+  /** URL of the OIDC userinfo endpoint (the Vorwerk account). */
+  async userInfoEndpoint(): Promise<string> {
+    const url = (await this.discovery()).userinfo_endpoint;
+    if (!url) throw new Error('OIDC discovery has no userinfo_endpoint');
+    return url;
   }
 
   /** Builds the Vorwerk login URL. The user types their password there, never in your app. */
