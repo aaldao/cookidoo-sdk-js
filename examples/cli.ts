@@ -50,7 +50,7 @@ process.on('uncaughtException', (e) => {
 
 const minutes = (s: number) => `${String(Math.round(s / 60))} min`;
 
-// Change URUGUAY to your own country's localization (see README).
+// Change URUGUAY to your own country, e.g. localizationFor('es') (see README).
 const cookidoo = new Cookidoo({ localization: URUGUAY, tokenStore: fileStore });
 const [command, ...args] = process.argv.slice(2);
 

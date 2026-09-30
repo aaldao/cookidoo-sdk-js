@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+- **All countries:** `localizationFor(countryCode, language?)` and `COUNTRIES` cover the 54 countries in cookidoo-api's localization.json, each with its site, languages and a default language. Every site and site/language pair was checked (they answer and endpoint discovery works). With a Uruguayan account, reads work in all 10 languages of the international site; on other sites the token works too, but Australia, Canada, Mexico and the US keep their data separately (an empty list there), so use the user's own country. Logging in from other countries hasn't been tested. `URUGUAY` is still exported.
+
 ## 0.2.2
 
 - `unitText` is typed as `YieldUnit`: Cookidoo only accepts a fixed list of yield units and rejects free text with HTTP 400 (found in the first real test, which used "pan"). Known values: `portion`, `gram`, `slice`. The README and `examples/recipe.json` used "loaf" and are fixed.

@@ -10,9 +10,13 @@ export {
   type Tokens,
 } from './auth.ts';
 export {
+  COUNTRIES,
   DEFAULT_USER_AGENT,
+  localizationFor,
   OAUTH_REDIRECT_URI,
   URUGUAY,
+  type CountryCode,
+  type CountrySite,
   type Localization,
 } from './config.ts';
 export { base64url, webCrypto, type CryptoAdapter } from './pkce.ts';

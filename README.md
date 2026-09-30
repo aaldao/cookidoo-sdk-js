@@ -179,7 +179,25 @@ const recipe = await cookidoo.createCustomRecipe({
 
 ### Localization
 
-`URUGUAY` uses `https://cookidoo.international` in Spanish. For another country, pass `{ countryCode, language, apiEndpoint }` with the values from cookidoo-api's [`localization.json`](https://github.com/miaucl/cookidoo-api/blob/master/cookidoo_api/localization.json).
+`localizationFor(countryCode, language?)` returns the localization for any of the 54 countries in cookidoo-api's [`localization.json`](https://github.com/miaucl/cookidoo-api/blob/master/cookidoo_api/localization.json). Without `language` it uses the country's default; a language the country's site doesn't serve throws. `COUNTRIES` lists each country's site, languages and default language.
+
+```ts
+import { localizationFor } from 'cookidoo-sdk-js';
+
+localizationFor('es');       // https://cookidoo.es, es-ES
+localizationFor('ar');       // https://cookidoo.international, es
+localizationFor('ch', 'fr-CH');
+```
+
+Countries without their own site (most of Latin America, Asia, the Middle East, the Nordics…) share `https://cookidoo.international`, which serves `en`, `fr`, `el`, `hu`, `id`, `pt-BR`, `ro`, `zh-Hans`, `es` and `vi`. `URUGUAY` is `localizationFor('uy')`.
+
+Checked on 2026-09-30:
+
+- Every site and site/language pair answers and endpoint discovery works on all of them.
+- With a Uruguayan account, the shopping list, the week plan and "My recipes" work in all 10 languages of `cookidoo.international`.
+- The same token also works on every other site, but the data is split in two: the European sites (`.at`, `.be`, `.ch`, `.cz`, `.de`, `.es`, `.fr`, `.co.uk`, `.it`, `.pl`, `.pt`, `.com.tr`) return the same shopping list as `cookidoo.international`, while `cookidoo.com.au`, `cookidoo.ca`, `cookidoo.mx` and `cookidoo.thermomix.com` return an empty one. Use the site of the user's own country, or they won't see their data.
+
+Logging in and using the other countries with an account from that country hasn't been tested.
 
 ## Being a good API citizen
 

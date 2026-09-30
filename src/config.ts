@@ -25,15 +25,111 @@ export type Localization = {
   apiEndpoint: string;
 };
 
-/**
- * Uruguay uses the "international" site in Spanish. For other countries, look up
- * the matching row in localization.json from miaucl/cookidoo-api.
- */
-export const URUGUAY: Localization = {
-  countryCode: 'uy',
-  language: 'es',
-  apiEndpoint: 'https://cookidoo.international',
+export type CountrySite = {
+  /** The country's Cookidoo site. */
+  apiEndpoint: string;
+  /** Languages the site serves. */
+  languages: readonly string[];
+  /** Used by `localizationFor` when no language is given. */
+  defaultLanguage: string;
 };
+
+/** Languages of https://cookidoo.international, shared by every country without its own site. */
+const INTERNATIONAL_LANGUAGES = ['en', 'fr', 'el', 'hu', 'id', 'pt-BR', 'ro', 'zh-Hans', 'es', 'vi'] as const;
+
+const intl = (defaultLanguage: (typeof INTERNATIONAL_LANGUAGES)[number]): CountrySite => ({
+  apiEndpoint: 'https://cookidoo.international',
+  languages: INTERNATIONAL_LANGUAGES,
+  defaultLanguage,
+});
+
+/**
+ * Every country in cookidoo-api's localization.json, keyed by country code.
+ * Checked on 2026-09-30: every site and site/language pair answers, and
+ * endpoint discovery works on every site. A Uruguayan account reads its data
+ * in every international language and on every European site; au, ca, mx and
+ * us keep their data separately. Other countries' logins are untested.
+ *
+ * Default language: the country's main language when its site serves it,
+ * otherwise English. On be/ch/ca it matches the language the site opens in.
+ */
+const SITES = {
+  ae: intl('en'),
+  ar: intl('es'),
+  at: { apiEndpoint: 'https://cookidoo.at', languages: ['de-AT'], defaultLanguage: 'de-AT' },
+  au: { apiEndpoint: 'https://cookidoo.com.au', languages: ['en-AU'], defaultLanguage: 'en-AU' },
+  be: { apiEndpoint: 'https://cookidoo.be', languages: ['nl-BE', 'en', 'fr-BE', 'de-BE'], defaultLanguage: 'nl-BE' },
+  bn: intl('en'),
+  br: intl('pt-BR'),
+  ca: { apiEndpoint: 'https://cookidoo.ca', languages: ['en-CA', 'fr-CA'], defaultLanguage: 'en-CA' },
+  ch: { apiEndpoint: 'https://cookidoo.ch', languages: ['en', 'fr-CH', 'de-CH', 'it-CH'], defaultLanguage: 'de-CH' },
+  cl: intl('es'),
+  co: intl('es'),
+  cy: intl('el'),
+  cz: { apiEndpoint: 'https://cookidoo.cz', languages: ['cs'], defaultLanguage: 'cs' },
+  de: { apiEndpoint: 'https://cookidoo.de', languages: ['de-DE'], defaultLanguage: 'de-DE' },
+  dk: intl('en'),
+  ee: intl('en'),
+  es: { apiEndpoint: 'https://cookidoo.es', languages: ['es-ES'], defaultLanguage: 'es-ES' },
+  fr: { apiEndpoint: 'https://cookidoo.fr', languages: ['fr-FR'], defaultLanguage: 'fr-FR' },
+  gb: { apiEndpoint: 'https://cookidoo.co.uk', languages: ['en-GB'], defaultLanguage: 'en-GB' },
+  gr: intl('el'),
+  gt: intl('es'),
+  hu: intl('hu'),
+  id: intl('id'),
+  ie: { apiEndpoint: 'https://cookidoo.co.uk', languages: ['en-GB'], defaultLanguage: 'en-GB' },
+  il: intl('en'),
+  is: intl('en'),
+  it: { apiEndpoint: 'https://cookidoo.it', languages: ['it-IT'], defaultLanguage: 'it-IT' },
+  kw: intl('en'),
+  lt: intl('en'),
+  lu: { apiEndpoint: 'https://cookidoo.be', languages: ['nl-BE', 'en', 'fr-BE', 'de-BE'], defaultLanguage: 'fr-BE' },
+  ma: intl('fr'),
+  mt: intl('en'),
+  mx: { apiEndpoint: 'https://cookidoo.mx', languages: ['es-MX'], defaultLanguage: 'es-MX' },
+  my: intl('en'),
+  nl: { apiEndpoint: 'https://cookidoo.be', languages: ['nl-BE', 'en', 'fr-BE', 'de-BE'], defaultLanguage: 'nl-BE' },
+  no: intl('en'),
+  nz: { apiEndpoint: 'https://cookidoo.com.au', languages: ['en-AU'], defaultLanguage: 'en-AU' },
+  pa: intl('es'),
+  pe: intl('es'),
+  ph: intl('en'),
+  pl: { apiEndpoint: 'https://cookidoo.pl', languages: ['pl'], defaultLanguage: 'pl' },
+  pt: { apiEndpoint: 'https://cookidoo.pt', languages: ['pt-PT'], defaultLanguage: 'pt-PT' },
+  py: intl('es'),
+  ro: intl('ro'),
+  sa: intl('en'),
+  se: intl('en'),
+  sg: intl('en'),
+  th: intl('en'),
+  tr: { apiEndpoint: 'https://cookidoo.com.tr', languages: ['tr-TR'], defaultLanguage: 'tr-TR' },
+  ua: intl('en'),
+  us: { apiEndpoint: 'https://cookidoo.thermomix.com', languages: ['en-US'], defaultLanguage: 'en-US' },
+  uy: intl('es'),
+  vn: intl('vi'),
+  za: intl('en'),
+} satisfies Record<string, CountrySite>;
+
+export type CountryCode = keyof typeof SITES;
+
+export const COUNTRIES: Readonly<Record<CountryCode, CountrySite>> = SITES;
+
+/**
+ * The localization for a country, in its default language or in `language`,
+ * which must be one the country's site serves.
+ */
+export function localizationFor(countryCode: CountryCode, language?: string): Localization {
+  const site: CountrySite | undefined = COUNTRIES[countryCode];
+  if (!site) throw new Error(`Unknown country code: ${countryCode}`);
+  const lang = language ?? site.defaultLanguage;
+  if (!site.languages.includes(lang)) {
+    throw new Error(`${countryCode} does not serve "${lang}"; use one of: ${site.languages.join(', ')}`);
+  }
+  return { countryCode, language: lang, apiEndpoint: site.apiEndpoint };
+}
+
+/** Uruguay uses the "international" site in Spanish. */
+export const URUGUAY: Localization = localizationFor('uy');
 
 /**
  * Cloudflare sits in front of the login and discovery endpoints; a browser
