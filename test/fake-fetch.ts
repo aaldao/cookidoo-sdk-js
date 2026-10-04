@@ -1,6 +1,15 @@
 // Shared by the tests: a fetch stand-in that records calls.
 
-export type Call = { method: string; url: string; body?: string; auth?: string; accept?: string };
+export type Call = {
+  method: string;
+  url: string;
+  body?: string;
+  /** Multipart bodies (image uploads). */
+  form?: FormData;
+  auth?: string;
+  accept?: string;
+  contentType?: string;
+};
 
 /** Fake fetch: records calls and tracks how many are in flight at once. */
 export function fakeFetch(respond: (c: Call) => { status: number; body?: unknown }) {
@@ -12,9 +21,11 @@ export function fakeFetch(respond: (c: Call) => { status: number; body?: unknown
     const call: Call = {
       method: init?.method ?? 'GET',
       url: input instanceof Request ? input.url : input.toString(),
-      body: init?.body as string | undefined,
+      body: typeof init?.body === 'string' ? init.body : undefined,
+      form: init?.body instanceof FormData ? init.body : undefined,
       auth: headers.Authorization,
       accept: headers.Accept,
+      contentType: headers['Content-Type'],
     };
     calls.push(call);
     active++;

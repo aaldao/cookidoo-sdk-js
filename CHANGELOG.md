@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- **Recipe photos:** `uploadCustomRecipeImage(recipeId, image, { ownedByUser? })` uploads a JPEG or PNG (up to 10 MB) and sets it on a recipe in "My recipes", returning the updated recipe. Same flow as the Cookidoo website, reverse-engineered by other projects: Cookidoo signs the upload, the file goes to Vorwerk's Cloudinary account, and a PATCH sets the stored path. In Node pass the bytes (`data`); in React Native/Expo pass the file `uri` (e.g. from expo-image-picker). Validated locally first (`RecipeValidationError`); a failed signature or upload leaves the recipe untouched. Not yet verified against a real account.
+- `imageOwnedByUser` is now read from `isImageCopyrightOwned`, the name Cookidoo uses in its responses, so `updateCustomRecipe` keeps it instead of resetting it to false.
+- `updateCustomRecipe` refuses (`RecipeValidationError`) to drop a photo you uploaded if its path can't be recovered; a Vorwerk photo on a copied recipe is still dropped, as before.
+- The CLI example has `upload-image <recipeId> <photo>`.
+
 ## 0.4.0
 
 - `getAccount()` returns the Vorwerk account from the OIDC userinfo endpoint: email, name, username, picture, locale, country of residence and creation date (`Account`).
