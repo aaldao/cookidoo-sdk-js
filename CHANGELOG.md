@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+- **Cook today / meal plan:** `addCustomRecipesToDay(recipeIds, day?)` plans recipes from "My recipes" for a day (today by default: Cookidoo's "Cook today"), and `removeCustomRecipeFromDay(recipeId, day?)` takes one off. Verified on a real account (2026-10-05).
+- **`getWeek` shows the user's own recipes:** the plain week only lists their ids, so they were missing. It now reads the enhanced week, which names every planned recipe; each one says whether it's from "My recipes" (`custom`).
+- **All yield units:** `YIELD_UNITS` lists the ten units of Cookidoo's recipe editor (`portion`, `slice`, `piece`, `gram`, `litre`, `ounce`, `cup`, `glass`, `bottle`, `jar`), and `YieldUnit` names them all. Verified on a real account (2026-10-05): a recipe yielding 300 `gram` and then 2 `jar` was stored as sent. Yields in quarters (1.5 litres) are now read as they are, instead of as 0, and recipes are checked locally for a yield over `MAX_YIELD` (9999) or not in quarters (`RecipeValidationError`).
+- **Expo SDK 57 photo uploads:** `uploadCustomRecipeImage` accepts any Blob-like `data` (an object with `size` and `arrayBuffer()` that doesn't extend the global `Blob`), such as an `expo-file-system` `File`, and sends it as it is. Expo's `fetch` can't upload React Native's `{ uri }` form parts ("Unsupported FormDataPart implementation"), found from Expo Go on a real account; the README now recommends `new File(asset.uri)` for Expo, and `uri` only for React Native's own `fetch`.
+
 ## 0.5.0
 
 - **Recipe photos:** `uploadCustomRecipeImage(recipeId, image, { ownedByUser? })` uploads a JPEG or PNG (up to 10 MB) and sets it on a recipe in "My recipes", returning the updated recipe. Same flow as the Cookidoo website, reverse-engineered by other projects: Cookidoo signs the upload, the file goes to Vorwerk's Cloudinary account, and a PATCH sets the stored path. In Node pass the bytes (`data`); in React Native/Expo pass the file `uri` (e.g. from expo-image-picker). Validated locally first (`RecipeValidationError`); a failed signature or upload leaves the recipe untouched.

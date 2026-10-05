@@ -13,7 +13,28 @@ export type MachineType = Loose<'TM5' | 'TM6' | 'TM7' | 'TM31'>;
  * HTTP 400); these are the values seen in real recipes so far. Free text like
  * "loaf" is rejected, so use e.g. 12 × "slice" instead.
  */
-export type YieldUnit = Loose<'portion' | 'gram' | 'slice'>;
+/**
+ * The yield units of Cookidoo's recipe editor (read from its web editor, 2026-10-05), with the
+ * names its Spanish site shows: portion "ración", slice "porción", piece "trozo", gram, litre,
+ * ounce, cup "taza", glass "vaso", bottle "frasco", jar "tarro". Cookidoo rejects any other
+ * text with HTTP 400; the type stays open in case it adds more.
+ */
+export const YIELD_UNITS = [
+  'portion',
+  'slice',
+  'piece',
+  'gram',
+  'litre',
+  'ounce',
+  'cup',
+  'glass',
+  'bottle',
+  'jar',
+] as const;
+export type YieldUnit = Loose<(typeof YIELD_UNITS)[number]>;
+
+/** The largest yield Cookidoo's editor accepts; amounts go in quarters (1.5 litres, 2.75 jars). */
+export const MAX_YIELD = 9999;
 export type Speed = Loose<
   | 'soft'
   | '0.5' | '1' | '1.5' | '2' | '2.5' | '3' | '3.5' | '4' | '4.5' | '5'
@@ -207,9 +228,10 @@ export type ImageMimeType = 'image/jpeg' | 'image/png';
  * A photo to upload with `uploadCustomRecipeImage`.
  *
  * - **Node** (or anywhere with a full `Blob`): pass the file's bytes in `data`.
- * - **React Native/Expo**: pass the file's `uri` (e.g. from expo-image-picker).
- *   React Native's FormData reads the file from disk itself, so the bytes never
- *   go through JavaScript. `size` (bytes, e.g. the picker's `fileSize`) lets
+ * - **Expo (SDK 57+)**: pass an expo-file-system `File` in `data`. Expo's fetch
+ *   reads it from disk; it can't upload `{ uri }` form parts.
+ * - **React Native's own fetch**: pass the file's `uri`. Its FormData reads the
+ *   file from disk itself. `size` (bytes, e.g. the picker's `fileSize`) lets
  *   the size limit be checked before anything is sent.
  *
  * `fileName` defaults to "recipe.jpg" / "recipe.png".
@@ -231,6 +253,18 @@ const IMAGE_TYPES: Record<ImageMimeType, { ext: string; magic: number[]; label: 
   'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], label: 'PNG' },
 };
 
+/**
+ * A Blob, or an object that implements one without extending the global Blob, like
+ * expo-file-system's `File`: Expo's fetch uploads it as it is (its `bytes()`).
+ */
+function isBlobLike(data: unknown): data is Blob {
+  if (data instanceof Blob) return true;
+  if (typeof data !== 'object' || data === null) return false;
+  if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) return false;
+  const d = data as { size?: unknown; arrayBuffer?: unknown };
+  return typeof d.size === 'number' && typeof d.arrayBuffer === 'function';
+}
+
 function imageBytes(data: ArrayBuffer | Uint8Array): Uint8Array {
   return data instanceof Uint8Array ? data : new Uint8Array(data);
 }
@@ -251,7 +285,7 @@ export function validateRecipeImage(image: RecipeImage): void {
       throw new RecipeValidationError('The photo uri must not be empty.');
     }
     size = image.size;
-  } else if (image.data instanceof Blob) {
+  } else if (isBlobLike(image.data)) {
     size = image.data.size;
   } else if (image.data !== undefined) {
     const bytes = imageBytes(image.data);
@@ -278,7 +312,7 @@ export function appendImageFile(form: FormLike, image: RecipeImage): void {
   const append = form.append.bind(form) as (name: string, value: unknown, fileName?: string) => void;
   if (image.uri !== undefined) {
     append('file', { uri: image.uri, name, type: image.mimeType });
-  } else if (image.data instanceof Blob) {
+  } else if (isBlobLike(image.data)) {
     append('file', image.data, name);
   } else if (image.data !== undefined) {
     // Copy into a fresh ArrayBuffer-backed view: Blob only takes those.
@@ -430,7 +464,7 @@ export function parseCustomRecipe(json: unknown, siteUrl: string, language: stri
     name: str(c.name) ?? '',
     ingredients: parseIngredients(nonEmpty(c.recipeIngredient, c.ingredients)),
     instructions: parseInstructions(nonEmpty(c.instructions, c.recipeInstructions)),
-    servingSize: int(yieldObj.value) ?? 0,
+    servingSize: typeof yieldObj.value === 'number' && Number.isFinite(yieldObj.value) ? yieldObj.value : 0,
     unitText: str(yieldObj.unitText) ?? 'portion',
     activeTime: durationToSeconds(c.prepTime),
     totalTime: durationToSeconds(c.totalTime),
@@ -537,6 +571,12 @@ type PayloadInput = Required<Omit<NewCustomRecipe, 'image'>> & {
 export function buildCustomRecipePayload(r: PayloadInput): Json {
   if (!r.name.trim()) throw new RecipeValidationError('Recipe name must not be empty.');
   if (!(r.servingSize > 0)) throw new RecipeValidationError('Recipe servings must be greater than zero.');
+  if (r.servingSize > MAX_YIELD) {
+    throw new RecipeValidationError(`Recipe servings must be at most ${String(MAX_YIELD)}.`);
+  }
+  if (!Number.isInteger(r.servingSize * 4)) {
+    throw new RecipeValidationError('Recipe servings must be a multiple of 0.25 (e.g. 1.5).');
+  }
   if (r.activeTime < 0 || r.totalTime < 0) throw new RecipeValidationError('Recipe times must not be negative.');
   if (r.activeTime > r.totalTime) throw new RecipeValidationError('Active time must not exceed total time.');
   if (!r.unitText.trim()) throw new RecipeValidationError('Recipe unit text must not be empty.');

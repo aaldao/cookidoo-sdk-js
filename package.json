@@ -1,6 +1,6 @@
 {
   "name": "cookidoo-sdk-js",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Unofficial JavaScript/TypeScript client for Cookidoo. Runs on Node, React Native/Expo and any environment with fetch.",
   "license": "MIT",
   "repository": {

@@ -90,13 +90,12 @@ type SubscriptionJSON = {
   expires?: unknown;
 };
 
-type DayRecipeJSON = { id: string; title: string; totalTime?: number | null };
+/** A day of the enhanced week: Cookidoo's recipes and the user's own, each with its title. */
 type CalendarDayJSON = {
   id: string;
   title: string;
   dayKey: string;
-  recipes: DayRecipeJSON[];
-  customerRecipes?: DayRecipeJSON[];
+  plannedRecipes?: { recipeId: string; recipeType?: string; title: string }[];
 };
 
 // ---------------------------------------------------------------------------
@@ -114,10 +113,17 @@ const RELS = {
     fallback: 'ownership/subscriptions',
   },
   pantryHome: { service: 'shopping', rel: 'pantry:home', fallback: 'shopping/{language}' },
+  // The enhanced week names the user's own recipes too; the plain one only lists their ids.
   myWeek: {
     service: 'planning',
-    rel: 'planning:api-my-week-from-date',
-    fallback: 'planning/{language}/api/my-week/{day}',
+    rel: 'planning:api-my-week-enhanced-from-date',
+    fallback: 'planning/{language}/api/my-week-enhanced/{day}',
+  },
+  myDay: { service: 'planning', rel: 'planning:api-my-day', fallback: 'planning/{language}/api/my-day' },
+  myDayRecipe: {
+    service: 'planning',
+    rel: 'planning:api-my-day-recipes',
+    fallback: 'planning/{language}/api/my-day/{day}/recipes/{id}',
   },
   ingredientsOwnership: {
     service: 'shopping',
@@ -390,8 +396,38 @@ export class Cookidoo {
     return (data.myDays ?? []).map((d) => ({
       day: d.dayKey ?? d.id,
       title: d.title,
-      recipes: [...d.recipes, ...(d.customerRecipes ?? [])].map((r) => ({ id: r.id, name: r.title })),
+      recipes: (d.plannedRecipes ?? []).map((r) => ({
+        id: r.recipeId,
+        name: r.title,
+        custom: r.recipeType === 'CUSTOMER',
+      })),
     }));
+  }
+
+  /**
+   * Plans recipes from "My recipes" for a day of the week (default today, in the device's time
+   * zone). For today it's Cookidoo's "Cook today". Recipes already planned that day stay.
+   */
+  async addCustomRecipesToDay(recipeIds: string[], day = new Date()): Promise<void> {
+    if (recipeIds.length === 0 || recipeIds.some((id) => typeof id !== 'string' || !id.trim())) {
+      throw new RecipeValidationError('Pass at least one recipe id, none of them empty.');
+    }
+    const p = await this.resolvePaths();
+    await this.sendJson('PUT', fill(p.myDay, this.lang()), {
+      recipeIds,
+      dayKey: isoDate(day),
+      recipeSource: 'CUSTOMER',
+    });
+  }
+
+  /** Takes a recipe from "My recipes" off a day of the week (default today). */
+  async removeCustomRecipeFromDay(recipeId: string, day = new Date()): Promise<void> {
+    if (typeof recipeId !== 'string' || !recipeId.trim()) {
+      throw new RecipeValidationError('The recipe id must not be empty.');
+    }
+    const p = await this.resolvePaths();
+    const path = fill(p.myDayRecipe, { ...this.lang(), day: isoDate(day), id: recipeId });
+    await this.sendJson('DELETE', `${path}?recipeSource=CUSTOMER`);
   }
 
   // --- Writing (shopping list) ----------------------------------------------
@@ -658,7 +694,7 @@ export class Cookidoo {
   }
 
   private sendJson<T>(
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
     accept = 'application/json',

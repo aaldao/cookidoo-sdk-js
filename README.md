@@ -8,7 +8,7 @@ An **unofficial** JavaScript/TypeScript client for Cookidoo. The same code runs 
 
 - OAuth 2 login with PKCE against Vorwerk's real login page. Your code never sees the password.
 - Automatic token refresh, one at a time, because the server rotates the refresh token.
-- Reads the user's account (email, name, country), community profile and subscription, the shopping list and the weekly meal plan.
+- Reads the user's account (email, name, country), community profile and subscription, the shopping list and the weekly meal plan, and plans your own recipes for a day ("Cook today").
 - Writes to the shopping list: check/uncheck ingredients and additional items, and add, rename or remove additional items.
 - **My recipes:** list, read, create, copy from a Cookidoo recipe, update and delete your own recipes, including Thermomix settings (time/temperature/speed, guided modes) linked to the step text, and upload their photos.
 - Shopping list helpers: a unified view that merges ingredients across recipes (ES/PT/EN synonyms, quantities added up per unit), a by-recipe view, and unchecked-first ordering.
@@ -130,7 +130,8 @@ This works in Expo Go (SDK 57).
 | `getUserInfo()` | The Cookidoo community profile: `{ id, username, description, picture, isPublic }` |
 | `getSubscription()` | The active subscription (`{ active, status, type, level, source, startDate, expires, … }`), or `null` |
 | `getShoppingList()` | `{ recipes, ingredients, additional }` |
-| `getWeek(day?)` | Meal plan for the week containing `day` |
+| `getWeek(day?)` | Meal plan for the week containing `day`: Cookidoo's recipes and your own (`custom: true`) |
+| `addCustomRecipesToDay(ids, day?)` / `removeCustomRecipeFromDay(id, day?)` | Plans recipes from "My recipes" for a day, or takes one off; today by default (Cookidoo's "Cook today") |
 | `setIngredientsOwned(changes)` | Checks/unchecks ingredients in a single POST |
 | `setAdditionalOwned(changes)` | Checks/unchecks additional items in a single POST |
 | `addAdditionalItems(names)` | Creates additional items and returns them with their ids |
@@ -163,7 +164,7 @@ const recipe = await cookidoo.createCustomRecipe({
     'Let it rise for 1 hour and bake at 220 °C for 30 minutes.',
   ],
   servingSize: 12,
-  unitText: 'slice', // Cookidoo only accepts its own units: 'portion', 'gram', 'slice'…
+  unitText: 'slice', // one of Cookidoo's own units (YIELD_UNITS): 'portion', 'gram', 'litre'…
   activeTime: 600, // seconds
   totalTime: 6000,
   tools: ['TM6', 'TM7'],
@@ -172,7 +173,7 @@ const recipe = await cookidoo.createCustomRecipe({
 
 - **Steps** are plain strings, or objects with `settings` (`time`, `temperature`, `speed`) and `annotations`.
 - **Annotations** link a piece of the step's text (`slot`, which must appear in the text verbatim) to an ingredient (`INGREDIENT`, whose `description` must be one of `ingredients`), Thermomix settings (`TTS`: time in seconds, temperature, speed, direction) or a guided mode (`MODE`: dough, browning, steaming…). Annotations this library doesn't model come back as `OTHER` and are preserved when you update the recipe.
-- **Yield units are a fixed list** on Cookidoo's side (`portion`, `gram`, `slice` have been seen in real recipes). Free text such as `"loaf"` is rejected with HTTP 400.
+- **Yield units are a fixed list** on Cookidoo's side, exported as `YIELD_UNITS`: `portion`, `slice`, `piece`, `gram`, `litre`, `ounce`, `cup`, `glass`, `bottle` and `jar` (the units of Cookidoo's own recipe editor). Free text such as `"loaf"` is rejected with HTTP 400. The amount (`servingSize`) goes in quarters, up to `MAX_YIELD` (9999): a mayonnaise can yield `300` `gram`, a soup `1.5` `litre`.
 - **Everything is validated locally** before sending anything; errors are `RecipeValidationError`.
 - **Creating takes 3 requests** (create an empty recipe, fill it in, reload it). If filling it in fails, you get an `IncompleteCustomRecipeError` with the `recipeId` of the empty recipe left in your account, so you can retry with `updateCustomRecipe` or delete it.
 - **Updating also takes 3 requests** (load, save, reload). Leaving `image` out keeps your photo (and whether you declared you own it); `image` must be a customer-recipe path or filename, not a display URL. To set a new photo, upload it (below).
@@ -206,25 +207,28 @@ const recipe = await cookidoo.uploadCustomRecipeImage(recipeId, {
 console.log(recipe.image); // display URL of the new photo
 ```
 
-**Expo / React Native:** pass the file's `uri`. React Native's `FormData` uploads it straight from disk, so the bytes never go through JavaScript (and React Native's `Blob` can't be built from bytes anyway). With [`expo-image-picker`](https://docs.expo.dev/versions/latest/sdk/imagepicker/):
+**Expo (SDK 57+):** pass an [`expo-file-system`](https://docs.expo.dev/versions/latest/sdk/filesystem/) `File`. Expo's `fetch` reads it from disk when uploading; it can't upload React Native's `{ uri }` form parts (it throws "Unsupported FormDataPart implementation"). With [`expo-image-picker`](https://docs.expo.dev/versions/latest/sdk/imagepicker/):
 
 ```ts
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
-const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8 });
+const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
 if (!picked.canceled) {
   const asset = picked.assets[0];
   if (asset.mimeType !== 'image/jpeg' && asset.mimeType !== 'image/png') {
     throw new Error('Pick a JPEG or PNG photo'); // or convert it first (below)
   }
   const recipe = await cookidoo.uploadCustomRecipeImage(recipeId, {
-    uri: asset.uri,
+    data: new File(asset.uri),
     mimeType: asset.mimeType,
-    fileName: asset.fileName ?? undefined,
-    size: asset.fileSize, // optional: lets the 10 MB limit be checked before sending
   });
 }
 ```
+
+Any object that implements `Blob` without extending the global one (like that `File`) is accepted as `data` and sent as it is; its `size` is checked against the limit.
+
+**React Native without Expo's fetch:** pass the file's `uri` (`{ uri, mimeType, fileName?, size? }`). React Native's own `FormData` and `fetch` upload it straight from disk.
 
 On iOS the picker can return the original HEIC (or AVIF) photo. Convert it to JPEG first, for example with `expo-image-manipulator`, which can also shrink it.
 

@@ -12,6 +12,7 @@ import {
   IncompleteCustomRecipeError,
   parseCustomRecipe,
   RecipeValidationError,
+  YIELD_UNITS,
   type Instruction,
   type NewCustomRecipe,
 } from '../src/recipes.ts';
@@ -187,6 +188,8 @@ test('invalid recipes are rejected before any request', async () => {
   const bad: [Partial<NewCustomRecipe>, RegExp][] = [
     [{ name: '  ' }, /name/],
     [{ servingSize: 0 }, /servings/],
+    [{ servingSize: 10000 }, /9999/],
+    [{ servingSize: 1.3 }, /0\.25/],
     [{ activeTime: 4000 }, /Active time/],
     [{ totalTime: -1 }, /negative/],
     [{ image: 'https://example.com/photo.jpg' }, /image/],
@@ -294,4 +297,31 @@ test('copy, list and remove', async () => {
   ]);
   assert.deepEqual(JSON.parse(calls[0].body ?? ''), { recipeUrl: `${SITE}/recipes/recipe/es/r166987`, servingSize: 4 });
   assert.equal(calls[1].accept, ACCEPT_FULL);
+});
+
+// ---------------------------------------------------------------------------
+// Yield units
+
+test("YIELD_UNITS lists the ten units of Cookidoo's recipe editor", () => {
+  assert.deepEqual(
+    [...YIELD_UNITS].sort(),
+    ['bottle', 'cup', 'glass', 'gram', 'jar', 'litre', 'ounce', 'piece', 'portion', 'slice'],
+  );
+});
+
+test('a yield in quarters (1.5 litres) is read and sent as it is', () => {
+  const json = {
+    ...RECIPE,
+    recipeContent: { ...RECIPE.recipeContent, yield: { value: 1.5, unitText: 'litre' } },
+  };
+  const r = parseCustomRecipe(json, SITE, 'es');
+  assert.equal(r.servingSize, 1.5);
+  assert.equal(r.unitText, 'litre');
+
+  const payload = buildCustomRecipePayload({
+    ...r,
+    servingSize: 2.75,
+    unitText: 'jar',
+  }) as { yield: unknown };
+  assert.deepEqual(payload.yield, { value: 2.75, unitText: 'jar' });
 });

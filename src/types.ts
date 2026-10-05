@@ -23,7 +23,8 @@ export type WeekDay = {
   /** Day as "2026-09-29" (or the id Cookidoo sends if there is no dayKey). */
   day: string;
   title: string;
-  recipes: { id: string; name: string }[];
+  /** `custom`: one of the user's "My recipes" (its id is a created recipe's), not a Cookidoo recipe. */
+  recipes: { id: string; name: string; custom: boolean }[];
 };
 
 export type UserInfo = {
