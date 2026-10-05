@@ -35,6 +35,7 @@ export {
 export {
   IncompleteCustomRecipeError,
   MAX_IMAGE_BYTES,
+  MAX_YIELD,
   RecipeValidationError,
   type Annotation,
   type BrowningPower,
@@ -57,6 +58,7 @@ export {
   type TemperatureSetting,
   type TTSAnnotation,
   type YieldUnit,
+  YIELD_UNITS,
 } from './recipes.ts';
 export type {
   Account,

@@ -163,7 +163,7 @@ const recipe = await cookidoo.createCustomRecipe({
     'Let it rise for 1 hour and bake at 220 °C for 30 minutes.',
   ],
   servingSize: 12,
-  unitText: 'slice', // Cookidoo only accepts its own units: 'portion', 'gram', 'slice'…
+  unitText: 'slice', // one of Cookidoo's own units (YIELD_UNITS): 'portion', 'gram', 'litre'…
   activeTime: 600, // seconds
   totalTime: 6000,
   tools: ['TM6', 'TM7'],
@@ -172,7 +172,7 @@ const recipe = await cookidoo.createCustomRecipe({
 
 - **Steps** are plain strings, or objects with `settings` (`time`, `temperature`, `speed`) and `annotations`.
 - **Annotations** link a piece of the step's text (`slot`, which must appear in the text verbatim) to an ingredient (`INGREDIENT`, whose `description` must be one of `ingredients`), Thermomix settings (`TTS`: time in seconds, temperature, speed, direction) or a guided mode (`MODE`: dough, browning, steaming…). Annotations this library doesn't model come back as `OTHER` and are preserved when you update the recipe.
-- **Yield units are a fixed list** on Cookidoo's side (`portion`, `gram`, `slice` have been seen in real recipes). Free text such as `"loaf"` is rejected with HTTP 400.
+- **Yield units are a fixed list** on Cookidoo's side, exported as `YIELD_UNITS`: `portion`, `slice`, `piece`, `gram`, `litre`, `ounce`, `cup`, `glass`, `bottle` and `jar` (the units of Cookidoo's own recipe editor). Free text such as `"loaf"` is rejected with HTTP 400. The amount (`servingSize`) goes in quarters, up to `MAX_YIELD` (9999): a mayonnaise can yield `300` `gram`, a soup `1.5` `litre`.
 - **Everything is validated locally** before sending anything; errors are `RecipeValidationError`.
 - **Creating takes 3 requests** (create an empty recipe, fill it in, reload it). If filling it in fails, you get an `IncompleteCustomRecipeError` with the `recipeId` of the empty recipe left in your account, so you can retry with `updateCustomRecipe` or delete it.
 - **Updating also takes 3 requests** (load, save, reload). Leaving `image` out keeps your photo (and whether you declared you own it); `image` must be a customer-recipe path or filename, not a display URL. To set a new photo, upload it (below).

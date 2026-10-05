@@ -2,6 +2,7 @@
 
 ## 0.5.1
 
+- **All yield units:** `YIELD_UNITS` lists the ten units of Cookidoo's recipe editor (`portion`, `slice`, `piece`, `gram`, `litre`, `ounce`, `cup`, `glass`, `bottle`, `jar`), and `YieldUnit` names them all. Verified on a real account (2026-10-05): a recipe yielding 300 `gram` and then 2 `jar` was stored as sent. Yields in quarters (1.5 litres) are now read as they are, instead of as 0, and recipes are checked locally for a yield over `MAX_YIELD` (9999) or not in quarters (`RecipeValidationError`).
 - **Expo SDK 57 photo uploads:** `uploadCustomRecipeImage` accepts any Blob-like `data` (an object with `size` and `arrayBuffer()` that doesn't extend the global `Blob`), such as an `expo-file-system` `File`, and sends it as it is. Expo's `fetch` can't upload React Native's `{ uri }` form parts ("Unsupported FormDataPart implementation"), found from Expo Go on a real account; the README now recommends `new File(asset.uri)` for Expo, and `uri` only for React Native's own `fetch`.
 
 ## 0.5.0

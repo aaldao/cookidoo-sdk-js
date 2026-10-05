@@ -13,7 +13,28 @@ export type MachineType = Loose<'TM5' | 'TM6' | 'TM7' | 'TM31'>;
  * HTTP 400); these are the values seen in real recipes so far. Free text like
  * "loaf" is rejected, so use e.g. 12 × "slice" instead.
  */
-export type YieldUnit = Loose<'portion' | 'gram' | 'slice'>;
+/**
+ * The yield units of Cookidoo's recipe editor (read from its web editor, 2026-10-05), with the
+ * names its Spanish site shows: portion "ración", slice "porción", piece "trozo", gram, litre,
+ * ounce, cup "taza", glass "vaso", bottle "frasco", jar "tarro". Cookidoo rejects any other
+ * text with HTTP 400; the type stays open in case it adds more.
+ */
+export const YIELD_UNITS = [
+  'portion',
+  'slice',
+  'piece',
+  'gram',
+  'litre',
+  'ounce',
+  'cup',
+  'glass',
+  'bottle',
+  'jar',
+] as const;
+export type YieldUnit = Loose<(typeof YIELD_UNITS)[number]>;
+
+/** The largest yield Cookidoo's editor accepts; amounts go in quarters (1.5 litres, 2.75 jars). */
+export const MAX_YIELD = 9999;
 export type Speed = Loose<
   | 'soft'
   | '0.5' | '1' | '1.5' | '2' | '2.5' | '3' | '3.5' | '4' | '4.5' | '5'
@@ -443,7 +464,7 @@ export function parseCustomRecipe(json: unknown, siteUrl: string, language: stri
     name: str(c.name) ?? '',
     ingredients: parseIngredients(nonEmpty(c.recipeIngredient, c.ingredients)),
     instructions: parseInstructions(nonEmpty(c.instructions, c.recipeInstructions)),
-    servingSize: int(yieldObj.value) ?? 0,
+    servingSize: typeof yieldObj.value === 'number' && Number.isFinite(yieldObj.value) ? yieldObj.value : 0,
     unitText: str(yieldObj.unitText) ?? 'portion',
     activeTime: durationToSeconds(c.prepTime),
     totalTime: durationToSeconds(c.totalTime),
@@ -550,6 +571,12 @@ type PayloadInput = Required<Omit<NewCustomRecipe, 'image'>> & {
 export function buildCustomRecipePayload(r: PayloadInput): Json {
   if (!r.name.trim()) throw new RecipeValidationError('Recipe name must not be empty.');
   if (!(r.servingSize > 0)) throw new RecipeValidationError('Recipe servings must be greater than zero.');
+  if (r.servingSize > MAX_YIELD) {
+    throw new RecipeValidationError(`Recipe servings must be at most ${String(MAX_YIELD)}.`);
+  }
+  if (!Number.isInteger(r.servingSize * 4)) {
+    throw new RecipeValidationError('Recipe servings must be a multiple of 0.25 (e.g. 1.5).');
+  }
   if (r.activeTime < 0 || r.totalTime < 0) throw new RecipeValidationError('Recipe times must not be negative.');
   if (r.activeTime > r.totalTime) throw new RecipeValidationError('Active time must not exceed total time.');
   if (!r.unitText.trim()) throw new RecipeValidationError('Recipe unit text must not be empty.');
