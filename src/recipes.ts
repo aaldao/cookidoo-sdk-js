@@ -341,6 +341,9 @@ type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 const int = (v: unknown): number | undefined => (Number.isInteger(v) ? (v as number) : undefined);
+/** A duration in seconds: Cookidoo takes halves too (turbo 0.5 s). */
+const seconds = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined;
 
 /** Seconds from a number or an ISO 8601 duration such as "PT1H30M". */
 export function durationToSeconds(value: unknown): number {
@@ -385,7 +388,7 @@ function parseAnnotation(v: unknown, text: string): Annotation | null {
     return compact({
       type: 'TTS' as const,
       slot,
-      time: int(data.time),
+      time: seconds(data.time),
       temperature: parseTemperature(data.temperature),
       speed: str(data.speed),
       direction: str(data.direction),
@@ -398,7 +401,7 @@ function parseAnnotation(v: unknown, text: string): Annotation | null {
       type: 'MODE' as const,
       slot,
       mode: typeof mode === 'string' ? mode : JSON.stringify(mode),
-      time: int(data.time),
+      time: seconds(data.time),
       temperature: parseTemperature(data.temperature),
       speed: str(data.speed),
       direction: str(data.direction),

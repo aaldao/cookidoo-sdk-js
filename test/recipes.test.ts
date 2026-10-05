@@ -325,3 +325,30 @@ test('a yield in quarters (1.5 litres) is read and sent as it is', () => {
   }) as { yield: unknown };
   assert.deepEqual(payload.yield, { value: 2.75, unitText: 'jar' });
 });
+
+test('an annotation time in half seconds (turbo 0.5 s) is read and sent back as it is', () => {
+  const step = {
+    type: 'STEP',
+    text: 'Picar turbo \uE00B/0.5 seg/2 veces.',
+    annotations: [
+      { type: 'MODE', name: 'turbo', data: { time: 0.5 }, position: { offset: 6, length: 22 } },
+      { type: 'TTS', data: { time: 1.5, speed: '5' }, position: { offset: 0, length: 5 } },
+    ],
+  };
+  const json = { ...RECIPE, recipeContent: { ...RECIPE.recipeContent, instructions: [step] } };
+
+  const r = parseCustomRecipe(json, SITE, 'es');
+  const annotations = (r.instructions[0] as Exclude<Instruction, string>).annotations ?? [];
+  assert.deepEqual(
+    annotations.map((a) => (a.type === 'MODE' || a.type === 'TTS' ? a.time : undefined)),
+    [0.5, 1.5],
+  );
+
+  const sent = instructionsToJson(r.instructions, r.ingredients) as {
+    annotations: { data: { time?: number } }[];
+  }[];
+  assert.deepEqual(
+    sent[0].annotations.map((a) => a.data.time),
+    [0.5, 1.5],
+  );
+});
