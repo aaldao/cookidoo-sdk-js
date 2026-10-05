@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- **Annotation times in halves:** times were read as whole seconds, so a turbo of 0.5 s came back without a time, and saving the recipe again (`updateCustomRecipe`) was rejected by Cookidoo with HTTP 400. Times are now read as they are (0.5, 1.5). Found editing a real recipe from CookiLab; verified on a real account (2026-10-05).
+
 ## 0.6.0
 
 - **Cook today / meal plan:** `addCustomRecipesToDay(recipeIds, day?)` plans recipes from "My recipes" for a day (today by default: Cookidoo's "Cook today"), and `removeCustomRecipeFromDay(recipeId, day?)` takes one off. Verified on a real account (2026-10-05).
