@@ -8,7 +8,7 @@ An **unofficial** JavaScript/TypeScript client for Cookidoo. The same code runs 
 
 - OAuth 2 login with PKCE against Vorwerk's real login page. Your code never sees the password.
 - Automatic token refresh, one at a time, because the server rotates the refresh token.
-- Reads the user's account (email, name, country), community profile and subscription, the shopping list and the weekly meal plan.
+- Reads the user's account (email, name, country), community profile and subscription, the shopping list and the weekly meal plan, and plans your own recipes for a day ("Cook today").
 - Writes to the shopping list: check/uncheck ingredients and additional items, and add, rename or remove additional items.
 - **My recipes:** list, read, create, copy from a Cookidoo recipe, update and delete your own recipes, including Thermomix settings (time/temperature/speed, guided modes) linked to the step text, and upload their photos.
 - Shopping list helpers: a unified view that merges ingredients across recipes (ES/PT/EN synonyms, quantities added up per unit), a by-recipe view, and unchecked-first ordering.
@@ -130,7 +130,8 @@ This works in Expo Go (SDK 57).
 | `getUserInfo()` | The Cookidoo community profile: `{ id, username, description, picture, isPublic }` |
 | `getSubscription()` | The active subscription (`{ active, status, type, level, source, startDate, expires, … }`), or `null` |
 | `getShoppingList()` | `{ recipes, ingredients, additional }` |
-| `getWeek(day?)` | Meal plan for the week containing `day` |
+| `getWeek(day?)` | Meal plan for the week containing `day`: Cookidoo's recipes and your own (`custom: true`) |
+| `addCustomRecipesToDay(ids, day?)` / `removeCustomRecipeFromDay(id, day?)` | Plans recipes from "My recipes" for a day, or takes one off; today by default (Cookidoo's "Cook today") |
 | `setIngredientsOwned(changes)` | Checks/unchecks ingredients in a single POST |
 | `setAdditionalOwned(changes)` | Checks/unchecks additional items in a single POST |
 | `addAdditionalItems(names)` | Creates additional items and returns them with their ids |

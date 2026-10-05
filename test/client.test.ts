@@ -87,13 +87,16 @@ test('on a 401 it refreshes once, stores the rotated token and retries', async (
       return { status: 200, body: { access_token: 'new', refresh_token: 'r2', expires_in: 43200 } };
     if (c.url.endsWith('.well-known/home')) return { status: 404 };
     if (c.auth === 'Bearer old') return { status: 401 };
-    return { status: 200, body: { myDays: [{ id: 'd', dayKey: '2026-09-29', title: '29.09.2026', recipes: [{ id: 'r', title: 'Flan' }] }] } };
+    return {
+      status: 200,
+      body: { myDays: [{ id: 'd', dayKey: '2026-09-29', title: '29.09.2026', plannedRecipes: [{ recipeId: 'r', recipeType: 'VORWERK', title: 'Flan' }] }] },
+    };
   });
   const store = memoryTokenStore({ accessToken: 'old', refreshToken: 'r1', expiresAt: later() });
   const c = new Cookidoo({ localization: URUGUAY, fetch: f.fetch, tokenStore: store });
 
   const week = await c.getWeek(new Date(2026, 8, 29));
-  assert.deepEqual(week, [{ day: '2026-09-29', title: '29.09.2026', recipes: [{ id: 'r', name: 'Flan' }] }]);
+  assert.deepEqual(week, [{ day: '2026-09-29', title: '29.09.2026', recipes: [{ id: 'r', name: 'Flan', custom: false }] }]);
   assert.equal(f.calls.filter((x) => x.url === 'https://ciam/token').length, 1);
   assert.match(f.calls.find((x) => x.url === 'https://ciam/token')!.body!, /refresh_token=r1/);
   assert.equal((await store.load())?.refreshToken, 'r2');
