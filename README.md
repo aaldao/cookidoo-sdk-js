@@ -206,25 +206,28 @@ const recipe = await cookidoo.uploadCustomRecipeImage(recipeId, {
 console.log(recipe.image); // display URL of the new photo
 ```
 
-**Expo / React Native:** pass the file's `uri`. React Native's `FormData` uploads it straight from disk, so the bytes never go through JavaScript (and React Native's `Blob` can't be built from bytes anyway). With [`expo-image-picker`](https://docs.expo.dev/versions/latest/sdk/imagepicker/):
+**Expo (SDK 57+):** pass an [`expo-file-system`](https://docs.expo.dev/versions/latest/sdk/filesystem/) `File`. Expo's `fetch` reads it from disk when uploading; it can't upload React Native's `{ uri }` form parts (it throws "Unsupported FormDataPart implementation"). With [`expo-image-picker`](https://docs.expo.dev/versions/latest/sdk/imagepicker/):
 
 ```ts
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
-const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8 });
+const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
 if (!picked.canceled) {
   const asset = picked.assets[0];
   if (asset.mimeType !== 'image/jpeg' && asset.mimeType !== 'image/png') {
     throw new Error('Pick a JPEG or PNG photo'); // or convert it first (below)
   }
   const recipe = await cookidoo.uploadCustomRecipeImage(recipeId, {
-    uri: asset.uri,
+    data: new File(asset.uri),
     mimeType: asset.mimeType,
-    fileName: asset.fileName ?? undefined,
-    size: asset.fileSize, // optional: lets the 10 MB limit be checked before sending
   });
 }
 ```
+
+Any object that implements `Blob` without extending the global one (like that `File`) is accepted as `data` and sent as it is; its `size` is checked against the limit.
+
+**React Native without Expo's fetch:** pass the file's `uri` (`{ uri, mimeType, fileName?, size? }`). React Native's own `FormData` and `fetch` upload it straight from disk.
 
 On iOS the picker can return the original HEIC (or AVIF) photo. Convert it to JPEG first, for example with `expo-image-manipulator`, which can also shrink it.
 

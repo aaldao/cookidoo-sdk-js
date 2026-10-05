@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- **Expo SDK 57 photo uploads:** `uploadCustomRecipeImage` accepts any Blob-like `data` (an object with `size` and `arrayBuffer()` that doesn't extend the global `Blob`), such as an `expo-file-system` `File`, and sends it as it is. Expo's `fetch` can't upload React Native's `{ uri }` form parts ("Unsupported FormDataPart implementation"), found from Expo Go on a real account; the README now recommends `new File(asset.uri)` for Expo, and `uri` only for React Native's own `fetch`.
+
 ## 0.5.0
 
 - **Recipe photos:** `uploadCustomRecipeImage(recipeId, image, { ownedByUser? })` uploads a JPEG or PNG (up to 10 MB) and sets it on a recipe in "My recipes", returning the updated recipe. Same flow as the Cookidoo website, reverse-engineered by other projects: Cookidoo signs the upload, the file goes to Vorwerk's Cloudinary account, and a PATCH sets the stored path. In Node pass the bytes (`data`); in React Native/Expo pass the file `uri` (e.g. from expo-image-picker). Validated locally first (`RecipeValidationError`); a failed signature or upload leaves the recipe untouched.

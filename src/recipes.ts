@@ -207,9 +207,10 @@ export type ImageMimeType = 'image/jpeg' | 'image/png';
  * A photo to upload with `uploadCustomRecipeImage`.
  *
  * - **Node** (or anywhere with a full `Blob`): pass the file's bytes in `data`.
- * - **React Native/Expo**: pass the file's `uri` (e.g. from expo-image-picker).
- *   React Native's FormData reads the file from disk itself, so the bytes never
- *   go through JavaScript. `size` (bytes, e.g. the picker's `fileSize`) lets
+ * - **Expo (SDK 57+)**: pass an expo-file-system `File` in `data`. Expo's fetch
+ *   reads it from disk; it can't upload `{ uri }` form parts.
+ * - **React Native's own fetch**: pass the file's `uri`. Its FormData reads the
+ *   file from disk itself. `size` (bytes, e.g. the picker's `fileSize`) lets
  *   the size limit be checked before anything is sent.
  *
  * `fileName` defaults to "recipe.jpg" / "recipe.png".
@@ -231,6 +232,18 @@ const IMAGE_TYPES: Record<ImageMimeType, { ext: string; magic: number[]; label: 
   'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], label: 'PNG' },
 };
 
+/**
+ * A Blob, or an object that implements one without extending the global Blob, like
+ * expo-file-system's `File`: Expo's fetch uploads it as it is (its `bytes()`).
+ */
+function isBlobLike(data: unknown): data is Blob {
+  if (data instanceof Blob) return true;
+  if (typeof data !== 'object' || data === null) return false;
+  if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) return false;
+  const d = data as { size?: unknown; arrayBuffer?: unknown };
+  return typeof d.size === 'number' && typeof d.arrayBuffer === 'function';
+}
+
 function imageBytes(data: ArrayBuffer | Uint8Array): Uint8Array {
   return data instanceof Uint8Array ? data : new Uint8Array(data);
 }
@@ -251,7 +264,7 @@ export function validateRecipeImage(image: RecipeImage): void {
       throw new RecipeValidationError('The photo uri must not be empty.');
     }
     size = image.size;
-  } else if (image.data instanceof Blob) {
+  } else if (isBlobLike(image.data)) {
     size = image.data.size;
   } else if (image.data !== undefined) {
     const bytes = imageBytes(image.data);
@@ -278,7 +291,7 @@ export function appendImageFile(form: FormLike, image: RecipeImage): void {
   const append = form.append.bind(form) as (name: string, value: unknown, fileName?: string) => void;
   if (image.uri !== undefined) {
     append('file', { uri: image.uri, name, type: image.mimeType });
-  } else if (image.data instanceof Blob) {
+  } else if (isBlobLike(image.data)) {
     append('file', image.data, name);
   } else if (image.data !== undefined) {
     // Copy into a fresh ArrayBuffer-backed view: Blob only takes those.

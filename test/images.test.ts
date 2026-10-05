@@ -130,6 +130,48 @@ test('upload: a Blob is sent as it is', async () => {
   assert.deepEqual(new Uint8Array(await file.arrayBuffer()), JPEG);
 });
 
+/**
+ * Like expo-file-system's `File`: it implements Blob (size, type, arrayBuffer, bytes) without
+ * extending the global Blob, so `instanceof Blob` is false.
+ */
+function blobLike(bytes: Uint8Array, name = 'photo.jpg') {
+  return {
+    name,
+    type: 'image/jpeg',
+    size: bytes.length,
+    bytes: () => Promise.resolve(bytes),
+    arrayBuffer: () => Promise.resolve(bytes.slice().buffer),
+  };
+}
+
+test('Expo: a Blob-like file (expo-file-system File) goes into the form as it is', () => {
+  const parts: unknown[][] = [];
+  const form = { append: (...args: unknown[]) => parts.push(args) };
+  const file = blobLike(JPEG);
+  assert.equal(file instanceof Blob, false);
+
+  appendImageFile(form, { data: file as unknown as Blob, mimeType: 'image/jpeg' });
+
+  assert.equal(parts.length, 1);
+  assert.equal(parts[0][0], 'file');
+  assert.equal(parts[0][1], file);
+  assert.equal(parts[0][2], 'recipe.jpg');
+});
+
+test('Expo: a Blob-like file has its size checked before any request', async () => {
+  const { c, f } = client();
+  const tooBig = { ...blobLike(JPEG), size: MAX_IMAGE_BYTES + 1 };
+  await assert.rejects(
+    c.uploadCustomRecipeImage(ID, { data: tooBig as unknown as Blob, mimeType: 'image/jpeg' }),
+    /10 MB/,
+  );
+  await assert.rejects(
+    c.uploadCustomRecipeImage(ID, { data: { ...blobLike(JPEG), size: 0 } as unknown as Blob, mimeType: 'image/jpeg' }),
+    /empty/,
+  );
+  assert.equal(f.calls.length, 0);
+});
+
 test('React Native: a file uri goes into the form as { uri, name, type }', () => {
   const parts: unknown[][] = [];
   const form = { append: (...args: unknown[]) => parts.push(args) };
