@@ -34,12 +34,14 @@ export {
 } from './shopping.ts';
 export {
   IncompleteCustomRecipeError,
+  MAX_IMAGE_BYTES,
   RecipeValidationError,
   type Annotation,
   type BrowningPower,
   type CustomRecipe,
   type CustomRecipeUpdate,
   type Direction,
+  type ImageMimeType,
   type IngredientAnnotation,
   type Instruction,
   type MachineType,
@@ -47,6 +49,7 @@ export {
   type ModeAnnotation,
   type NewCustomRecipe,
   type OtherAnnotation,
+  type RecipeImage,
   type Speed,
   type SteamingAccessory,
   type StepSettings,

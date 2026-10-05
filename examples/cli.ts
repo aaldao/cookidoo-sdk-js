@@ -9,9 +9,11 @@
  *   node examples/cli.ts recipe <id>
  *   node examples/cli.ts create-recipe examples/recipe.json
  *   node examples/cli.ts delete-recipe <id>
+ *   node examples/cli.ts upload-image <recipeId> photo.jpg   # JPEG or PNG, up to 10 MB
  *   node examples/cli.ts logout
  */
 import { readFile, rm, writeFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 
 import {
@@ -122,6 +124,20 @@ switch (command) {
     console.log(`Created ${created.id}: ${created.url}`);
     break;
   }
+  case 'upload-image': {
+    const [recipeId, file] = args;
+    if (!recipeId || !file) throw new Error('Usage: node examples/cli.ts upload-image <recipeId> <photo.jpg|photo.png>');
+    const ext = file.toLowerCase().split('.').pop();
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : null;
+    if (!mimeType) throw new Error('The photo must be a .jpg, .jpeg or .png file.');
+    const updated = await cookidoo.uploadCustomRecipeImage(recipeId, {
+      data: await readFile(file),
+      mimeType,
+      fileName: basename(file),
+    });
+    console.log(`Photo set on ${updated.name}: ${updated.image ?? '(no image returned)'}\n${updated.url}`);
+    break;
+  }
   case 'delete-recipe':
     await cookidoo.removeCustomRecipe(args[0]);
     console.log('Recipe deleted.');
@@ -133,6 +149,6 @@ switch (command) {
   default:
     console.log(
       'Usage: node examples/cli.ts login | me | list | week | add <name> | recipes | recipe <id> |\n' +
-        '       create-recipe <file.json> | delete-recipe <id> | logout',
+        '       create-recipe <file.json> | upload-image <recipeId> <photo> | delete-recipe <id> | logout',
     );
 }

@@ -119,6 +119,10 @@ export type CustomRecipe = {
   image: string | null;
   /** Display URL (small), or null. */
   thumbnail: string | null;
+  /**
+   * Whether the user declared they own the photo's rights (Cookidoo asks for
+   * this before sharing a recipe publicly). Read from `isImageCopyrightOwned`.
+   */
   imageOwnedByUser: boolean;
   /** Link to the recipe on the Cookidoo website. */
   url: string;
@@ -186,6 +190,99 @@ export function validateImage(image: string | undefined): void {
       'Custom recipe image must be a Cookidoo customer-recipe path or filename ' +
         '(bmp, jpe, jpeg, jpg, png), not a CDN/display URL.',
     );
+  }
+}
+
+/** True for a display URL of a photo uploaded to "My recipes" (as opposed to a Vorwerk recipe photo). */
+export function isCustomerImageUrl(image: string): boolean {
+  return /\/(?:prod|nonprod)\/img\/customer-recipe\//.test(image);
+}
+
+// ---------------------------------------------------------------------------
+// Photo uploads
+
+export type ImageMimeType = 'image/jpeg' | 'image/png';
+
+/**
+ * A photo to upload with `uploadCustomRecipeImage`.
+ *
+ * - **Node** (or anywhere with a full `Blob`): pass the file's bytes in `data`.
+ * - **React Native/Expo**: pass the file's `uri` (e.g. from expo-image-picker).
+ *   React Native's FormData reads the file from disk itself, so the bytes never
+ *   go through JavaScript. `size` (bytes, e.g. the picker's `fileSize`) lets
+ *   the size limit be checked before anything is sent.
+ *
+ * `fileName` defaults to "recipe.jpg" / "recipe.png".
+ */
+export type RecipeImage = { mimeType: ImageMimeType; fileName?: string } & (
+  | { data: Blob | ArrayBuffer | Uint8Array; uri?: never; size?: never }
+  | { uri: string; size?: number; data?: never }
+);
+
+/**
+ * The largest photo accepted. Cookidoo doesn't document a limit; 10 MB is
+ * Cloudinary's default for images, so bigger files would likely be rejected
+ * after the signature request.
+ */
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+const IMAGE_TYPES: Record<ImageMimeType, { ext: string; magic: number[]; label: string }> = {
+  'image/jpeg': { ext: 'jpg', magic: [0xff, 0xd8, 0xff], label: 'JPEG' },
+  'image/png': { ext: 'png', magic: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], label: 'PNG' },
+};
+
+function imageBytes(data: ArrayBuffer | Uint8Array): Uint8Array {
+  return data instanceof Uint8Array ? data : new Uint8Array(data);
+}
+
+/** Checks a photo before uploading it; throws RecipeValidationError. */
+export function validateRecipeImage(image: RecipeImage): void {
+  const type = Object.hasOwn(IMAGE_TYPES, image.mimeType) ? IMAGE_TYPES[image.mimeType] : undefined;
+  if (!type) throw new RecipeValidationError('Recipe photos must be JPEG or PNG (image/jpeg, image/png).');
+  if ((image.data === undefined) === (image.uri === undefined)) {
+    throw new RecipeValidationError('Pass either `data` or `uri` for the recipe photo.');
+  }
+  if (image.fileName !== undefined && !image.fileName.trim()) {
+    throw new RecipeValidationError('The photo file name must not be empty.');
+  }
+  let size: number | undefined;
+  if (image.uri !== undefined) {
+    if (typeof image.uri !== 'string' || !image.uri.trim()) {
+      throw new RecipeValidationError('The photo uri must not be empty.');
+    }
+    size = image.size;
+  } else if (image.data instanceof Blob) {
+    size = image.data.size;
+  } else if (image.data !== undefined) {
+    const bytes = imageBytes(image.data);
+    size = bytes.length;
+    if (size > 0 && !type.magic.every((b, i) => bytes[i] === b)) {
+      throw new RecipeValidationError(`The photo is not a ${type.label} file (mimeType is ${image.mimeType}).`);
+    }
+  }
+  if (size === 0) throw new RecipeValidationError('The photo is empty.');
+  if (size !== undefined && size > MAX_IMAGE_BYTES) {
+    throw new RecipeValidationError(`The photo is larger than 10 MB (${String(size)} bytes).`);
+  }
+}
+
+/** The minimal FormData surface `appendImageFile` needs (Node's and React Native's both fit). */
+export type FormLike = { append(name: string, value: never, fileName?: string): void };
+
+/**
+ * Adds the photo to a multipart form as `file`. A `uri` goes in as React
+ * Native's `{ uri, name, type }` file part; bytes go in as a Blob.
+ */
+export function appendImageFile(form: FormLike, image: RecipeImage): void {
+  const name = image.fileName ?? `recipe.${IMAGE_TYPES[image.mimeType].ext}`;
+  const append = form.append.bind(form) as (name: string, value: unknown, fileName?: string) => void;
+  if (image.uri !== undefined) {
+    append('file', { uri: image.uri, name, type: image.mimeType });
+  } else if (image.data instanceof Blob) {
+    append('file', image.data, name);
+  } else if (image.data !== undefined) {
+    // Copy into a fresh ArrayBuffer-backed view: Blob only takes those.
+    append('file', new Blob([new Uint8Array(imageBytes(image.data))], { type: image.mimeType }), name);
   }
 }
 
@@ -341,7 +438,8 @@ export function parseCustomRecipe(json: unknown, siteUrl: string, language: stri
     hints,
     image: rawImage ? rawImage.replace('{transformation}', 't_web_rdp_recipe_584x480_1_5x') : null,
     thumbnail: rawImage ? rawImage.replace('{transformation}', 't_web_shared_recipe_221x240') : null,
-    imageOwnedByUser: c.isImageOwnedByUser === true,
+    // Written as isImageOwnedByUser; Cookidoo reads it back as isImageCopyrightOwned.
+    imageOwnedByUser: (c.isImageOwnedByUser ?? c.isImageCopyrightOwned) === true,
     url: `${new URL(siteUrl).origin}/created-recipes/${language}/${json.recipeId}`,
     workStatus: str(json.workStatus) ?? 'PRIVATE',
     requiresAnnotationsCheck: metadata.requiresAnnotationsCheck === true,

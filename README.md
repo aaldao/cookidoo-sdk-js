@@ -10,7 +10,7 @@ An **unofficial** JavaScript/TypeScript client for Cookidoo. The same code runs 
 - Automatic token refresh, one at a time, because the server rotates the refresh token.
 - Reads the user's account (email, name, country), community profile and subscription, the shopping list and the weekly meal plan.
 - Writes to the shopping list: check/uncheck ingredients and additional items, and add, rename or remove additional items.
-- **My recipes:** list, read, create, copy from a Cookidoo recipe, update and delete your own recipes, including Thermomix settings (time/temperature/speed, guided modes) linked to the step text.
+- **My recipes:** list, read, create, copy from a Cookidoo recipe, update and delete your own recipes, including Thermomix settings (time/temperature/speed, guided modes) linked to the step text, and upload their photos.
 - Shopping list helpers: a unified view that merges ingredients across recipes (ES/PT/EN synonyms, quantities added up per unit), a by-recipe view, and unchecked-first ordering.
 
 > [!WARNING]
@@ -46,6 +46,7 @@ node examples/cli.ts list
 node examples/cli.ts week
 node examples/cli.ts recipes
 node examples/cli.ts create-recipe examples/recipe.json
+node examples/cli.ts upload-image <recipeId> photo.jpg
 ```
 
 Tokens are stored in `.cookidoo-tokens.json`, readable only by your user and ignored by git. The refresh token grants access to your account, so don't share it.
@@ -140,6 +141,7 @@ This works in Expo Go (SDK 57).
 | `createCustomRecipe(recipe)` | Creates a recipe (see below) |
 | `copyRecipeToCustom(recipeId, servingSize)` | Copies a Cookidoo recipe (e.g. `"r166987"`) into "My recipes" |
 | `updateCustomRecipe(id, changes)` | Updates the given fields; the rest keep their value |
+| `uploadCustomRecipeImage(id, image, options?)` | Uploads a JPEG/PNG photo and sets it on one of your recipes (see below) |
 | `removeCustomRecipe(id)` | Deletes one of your recipes |
 
 Shopping list helpers: `unifyIngredients`, `ingredientsByRecipe`, `pendingFirst`, `normalizeName`, `cleanIngredientName`, `sumAmounts`.
@@ -173,10 +175,58 @@ const recipe = await cookidoo.createCustomRecipe({
 - **Yield units are a fixed list** on Cookidoo's side (`portion`, `gram`, `slice` have been seen in real recipes). Free text such as `"loaf"` is rejected with HTTP 400.
 - **Everything is validated locally** before sending anything; errors are `RecipeValidationError`.
 - **Creating takes 3 requests** (create an empty recipe, fill it in, reload it). If filling it in fails, you get an `IncompleteCustomRecipeError` with the `recipeId` of the empty recipe left in your account, so you can retry with `updateCustomRecipe` or delete it.
-- **Updating also takes 3 requests** (load, save, reload). Leaving `image` out keeps your photo; `image` must be a customer-recipe path or filename, not a display URL. Uploading photos isn't supported.
+- **Updating also takes 3 requests** (load, save, reload). Leaving `image` out keeps your photo (and whether you declared you own it); `image` must be a customer-recipe path or filename, not a display URL. To set a new photo, upload it (below).
 - **Rate limit:** Cookidoo allows about 10 requests per minute on this service.
 
 [`examples/recipe.json`](examples/recipe.json) is a complete example you can create with the CLI and then delete.
+
+### Photos
+
+`uploadCustomRecipeImage(recipeId, image, options?)` uploads a photo the way the Cookidoo website does, and returns the updated recipe:
+
+1. Cookidoo signs the upload (`POST created-recipes/{lang}/image/signature`).
+2. The file goes to Vorwerk's Cloudinary account, without your Cookidoo token.
+3. A `PATCH` sets the stored path (`prod/img/customer-recipe/….jpg`) as the recipe's `image`. Cookidoo answers with the recipe; if it doesn't, the recipe is reloaded.
+
+The stored photo is served from `https://ugc.assets.tmecosys.com/image/upload/…`; `image` and `thumbnail` are display URLs at two sizes. Verified on a real account on 2026-10-04.
+
+The photo must be a JPEG or PNG of at most 10 MB (`MAX_IMAGE_BYTES`). It's checked before anything is sent (`RecipeValidationError`), and if the signature or the upload fails, the recipe isn't touched. Cloudinary may store a PNG as a JPEG, and it rejects photos smaller than about 80×80 pixels.
+
+`options.ownedByUser` declares that you own the photo's rights. The website sends `false` for private recipes and asks before sharing a recipe publicly; the default here is `false` too. It comes back as `imageOwnedByUser`, and later `updateCustomRecipe` calls keep both the photo and that flag.
+
+**Node:** pass the bytes.
+
+```ts
+import { readFile } from 'node:fs/promises';
+
+const recipe = await cookidoo.uploadCustomRecipeImage(recipeId, {
+  data: await readFile('bread.jpg'), // a Uint8Array, an ArrayBuffer or a Blob
+  mimeType: 'image/jpeg',
+});
+console.log(recipe.image); // display URL of the new photo
+```
+
+**Expo / React Native:** pass the file's `uri`. React Native's `FormData` uploads it straight from disk, so the bytes never go through JavaScript (and React Native's `Blob` can't be built from bytes anyway). With [`expo-image-picker`](https://docs.expo.dev/versions/latest/sdk/imagepicker/):
+
+```ts
+import * as ImagePicker from 'expo-image-picker';
+
+const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8 });
+if (!picked.canceled) {
+  const asset = picked.assets[0];
+  if (asset.mimeType !== 'image/jpeg' && asset.mimeType !== 'image/png') {
+    throw new Error('Pick a JPEG or PNG photo'); // or convert it first (below)
+  }
+  const recipe = await cookidoo.uploadCustomRecipeImage(recipeId, {
+    uri: asset.uri,
+    mimeType: asset.mimeType,
+    fileName: asset.fileName ?? undefined,
+    size: asset.fileSize, // optional: lets the 10 MB limit be checked before sending
+  });
+}
+```
+
+On iOS the picker can return the original HEIC (or AVIF) photo. Convert it to JPEG first, for example with `expo-image-manipulator`, which can also shrink it.
 
 ### Localization
 
@@ -205,8 +255,8 @@ Logging in and using the other countries with an account from that country hasn'
 This is an unofficial API, so the client is deliberately conservative:
 
 - **One request at a time:** each `Cookidoo` instance queues all its requests, so they never run in parallel.
-- **Local validation first:** invalid recipes are rejected before any request is sent.
-- **No retry loops:** on a 401 it refreshes once and retries once. If that fails too, it throws `AuthRequiredError`.
+- **Local validation first:** invalid recipes and photos are rejected before any request is sent.
+- **No retry loops:** on a 401 it refreshes once and retries once. If that fails too, it throws `AuthRequiredError`. Photo uploads to Cloudinary are never retried.
 - **Discovered endpoints:** paths come from `.well-known/home`, once per instance. If an endpoint isn't found, the known path is used and `usedFallbackPaths` is set.
 
 If you build a UI, batch taps (e.g. with a 1 s debounce) instead of sending one POST per tap, and don't reload more often than every 30 s.

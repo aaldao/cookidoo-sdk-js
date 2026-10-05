@@ -10,15 +10,19 @@ import {
 import { DEFAULT_USER_AGENT, type Localization } from './config.ts';
 import { webCrypto, type CryptoAdapter } from './pkce.ts';
 import {
+  appendImageFile,
   buildCustomRecipePayload,
   imageForPayload,
   IncompleteCustomRecipeError,
+  isCustomerImageUrl,
   parseCustomRecipe,
   RecipeValidationError,
   validateImage,
+  validateRecipeImage,
   type CustomRecipe,
   type CustomRecipeUpdate,
   type NewCustomRecipe,
+  type RecipeImage,
 } from './recipes.ts';
 import { cleanIngredientName } from './shopping.ts';
 import type {
@@ -502,8 +506,9 @@ export class Cookidoo {
     validateImage(changes.image);
     const current = await this.getCustomRecipe(id);
     const image = changes.image ?? current.image;
-    // The user's own photo only survives if its path can be recovered from the display URL.
-    if (changes.image === undefined && current.imageOwnedByUser && image !== null && imageForPayload(image) === null) {
+    // A photo the user uploaded only survives if its path can be recovered from the
+    // display URL. (A Vorwerk photo on a copied recipe can't be sent back, and is dropped.)
+    if (changes.image === undefined && image !== null && isCustomerImageUrl(image) && imageForPayload(image) === null) {
       throw new RecipeValidationError('Cannot preserve the existing custom recipe image.');
     }
     const payload = buildCustomRecipePayload({
@@ -525,6 +530,73 @@ export class Cookidoo {
     const p = await this.resolvePaths();
     await this.sendJson('PATCH', fill(p.customRecipe, { ...this.lang(), id }), payload);
     return this.getCustomRecipe(id);
+  }
+
+  /**
+   * Uploads a photo and sets it as the recipe's image, like the Cookidoo
+   * website does: Cookidoo signs the upload, the file goes to Vorwerk's
+   * Cloudinary account, and a PATCH sets the stored path on the recipe
+   * (2 requests to Cookidoo, plus a reload if the PATCH doesn't answer with the
+   * recipe). The photo is validated locally first; if the signature or the
+   * upload fails, the recipe isn't touched.
+   *
+   * `ownedByUser` declares that the user owns the photo's rights. The website
+   * sends false for private recipes and asks for it before sharing publicly.
+   * Default: false.
+   */
+  async uploadCustomRecipeImage(
+    recipeId: string,
+    image: RecipeImage,
+    options: { ownedByUser?: boolean } = {},
+  ): Promise<CustomRecipe> {
+    if (typeof recipeId !== 'string' || !recipeId.trim()) {
+      throw new RecipeValidationError('The recipe id must not be empty.');
+    }
+    validateRecipeImage(image);
+    const p = await this.resolvePaths();
+    // Cookidoo signs exactly these parameters; Cloudinary must receive the same ones.
+    const signed = { timestamp: nowSeconds(), source: 'uw' };
+    const res = await this.postJson<{ signature?: unknown } | null>(
+      `${fill(p.customRecipes, this.lang())}/image/signature`,
+      signed,
+    );
+    const signature = res?.signature;
+    if (typeof signature !== 'string' || !signature) throw new Error('Unexpected image signature response');
+    const path = await this.uploadToCloudinary(image, { ...signed, signature });
+    const recipePath = fill(p.customRecipe, { ...this.lang(), id: recipeId });
+    const patched = await this.sendJson<unknown>('PATCH', recipePath, {
+      image: path,
+      isImageOwnedByUser: options.ownedByUser ?? false,
+    });
+    // The PATCH answers with the full recipe; reload it only if it didn't.
+    try {
+      return this.toCustomRecipe(patched);
+    } catch {
+      return this.getCustomRecipe(recipeId);
+    }
+  }
+
+  /** Sends the photo to Vorwerk's Cloudinary account (queued, without the Cookidoo token). */
+  private uploadToCloudinary(image: RecipeImage, signed: Record<string, string | number>): Promise<string> {
+    return this.serial(async () => {
+      const form = new FormData();
+      form.append('api_key', CLOUDINARY_API_KEY);
+      for (const [key, value] of Object.entries(signed)) form.append(key, String(value));
+      form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+      appendImageFile(form, image);
+      // No Content-Type: fetch sets multipart/form-data with its boundary.
+      const r = await this.fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: form });
+      const text = await r.text().catch(() => '');
+      // A 401 here is about the signature, not the Cookidoo session: no refresh.
+      if (!r.ok) throw new CookidooHttpError('POST Cloudinary image upload', r.status, text);
+      const body = parseJsonOrNull(text) as { public_id?: unknown; format?: unknown } | null;
+      const path =
+        typeof body?.public_id === 'string' && typeof body.format === 'string'
+          ? `${body.public_id}.${body.format}`
+          : null;
+      if (path === null || imageForPayload(path) !== path) throw new Error('Unexpected image upload response');
+      return path;
+    });
   }
 
   async removeCustomRecipe(id: string): Promise<void> {
@@ -629,6 +701,20 @@ export class Cookidoo {
 }
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+function parseJsonOrNull(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+// Vorwerk's Cloudinary account for photos in "My recipes". These are public
+// values: the Cookidoo website's upload widget sends them from the browser.
+const CLOUDINARY_UPLOAD_URL = 'https://api-eu.cloudinary.com/v1_1/vorwerk-users-gc/image/upload';
+const CLOUDINARY_API_KEY = '993585863591145';
+const CLOUDINARY_UPLOAD_PRESET = 'prod-customer-recipe-signed';
 
 /** The created-recipes service only returns full recipes with this media type. */
 const CUSTOM_RECIPE_ACCEPT = 'application/vnd.vorwerk.customer-recipe.full+json';
