@@ -188,6 +188,8 @@ const recipe = await cookidoo.createCustomRecipe({
 2. The file goes to Vorwerk's Cloudinary account, without your Cookidoo token.
 3. A `PATCH` sets the stored path (`prod/img/customer-recipe/….jpg`) as the recipe's `image`. Cookidoo answers with the recipe; if it doesn't, the recipe is reloaded.
 
+The stored photo is served from `https://ugc.assets.tmecosys.com/image/upload/…`; `image` and `thumbnail` are display URLs at two sizes. Verified on a real account on 2026-10-04.
+
 The photo must be a JPEG or PNG of at most 10 MB (`MAX_IMAGE_BYTES`). It's checked before anything is sent (`RecipeValidationError`), and if the signature or the upload fails, the recipe isn't touched. Cloudinary may store a PNG as a JPEG, and it rejects photos smaller than about 80×80 pixels.
 
 `options.ownedByUser` declares that you own the photo's rights. The website sends `false` for private recipes and asks before sharing a recipe publicly; the default here is `false` too. It comes back as `imageOwnedByUser`, and later `updateCustomRecipe` calls keep both the photo and that flag.

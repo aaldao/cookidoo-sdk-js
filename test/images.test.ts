@@ -28,7 +28,7 @@ const isDiscovery = (c: Call) => c.url.endsWith('.well-known/home');
 
 type Reply = { status: number; body?: unknown };
 
-/** Cookidoo + Cloudinary as the reverse-engineered flow describes them. */
+/** Cookidoo + Cloudinary as observed on a real account (2026-10-04). */
 function happy(c: Call): Reply {
   if (c.url.endsWith('/image/signature')) return { status: 200, body: { signature: 'sig123' } };
   if (c.url === CLOUDINARY) return { status: 200, body: { public_id: PUBLIC_ID, format: 'jpg', secure_url: 'https://x' } };

@@ -2,10 +2,11 @@
 
 ## 0.5.0
 
-- **Recipe photos:** `uploadCustomRecipeImage(recipeId, image, { ownedByUser? })` uploads a JPEG or PNG (up to 10 MB) and sets it on a recipe in "My recipes", returning the updated recipe. Same flow as the Cookidoo website, reverse-engineered by other projects: Cookidoo signs the upload, the file goes to Vorwerk's Cloudinary account, and a PATCH sets the stored path. In Node pass the bytes (`data`); in React Native/Expo pass the file `uri` (e.g. from expo-image-picker). Validated locally first (`RecipeValidationError`); a failed signature or upload leaves the recipe untouched. Not yet verified against a real account.
+- **Recipe photos:** `uploadCustomRecipeImage(recipeId, image, { ownedByUser? })` uploads a JPEG or PNG (up to 10 MB) and sets it on a recipe in "My recipes", returning the updated recipe. Same flow as the Cookidoo website, reverse-engineered by other projects: Cookidoo signs the upload, the file goes to Vorwerk's Cloudinary account, and a PATCH sets the stored path. In Node pass the bytes (`data`); in React Native/Expo pass the file `uri` (e.g. from expo-image-picker). Validated locally first (`RecipeValidationError`); a failed signature or upload leaves the recipe untouched.
 - `imageOwnedByUser` is now read from `isImageCopyrightOwned`, the name Cookidoo uses in its responses, so `updateCustomRecipe` keeps it instead of resetting it to false.
 - `updateCustomRecipe` refuses (`RecipeValidationError`) to drop a photo you uploaded if its path can't be recovered; a Vorwerk photo on a copied recipe is still dropped, as before.
 - The CLI example has `upload-image <recipeId> <photo>`.
+- Verified on a real account (Uruguay, 2026-10-04): create a recipe, upload a 1200×900 JPEG, read it back (photo and thumbnail served from `ugc.assets.tmecosys.com` with HTTP 200, `imageOwnedByUser` false), rename it with `updateCustomRecipe` (photo and flag kept) and delete it. The real flow matched the implementation, so no code changes were needed.
 
 ## 0.4.0
 
